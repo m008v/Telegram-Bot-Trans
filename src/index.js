@@ -7,7 +7,7 @@ import { run } from "@grammyjs/runner";
 
 import { createTranslationBot } from "./bot.js";
 import { loadConfig } from "./config.js";
-import { GoogleTranslateService } from "./google-translate-service.js";
+import { GtxTranslateService } from "./gtx-translate-service.js";
 import { drainRunnerAndCloseTranslator } from "./runner-lifecycle.js";
 import { toSafeError } from "./safe-error.js";
 import { initializeTelegramBot } from "./telegram-startup.js";
@@ -18,12 +18,9 @@ const RUNNER_CAPACITY = 100;
 
 async function main() {
   const config = loadConfig();
-  const translator = new GoogleTranslateService({
-    projectId: config.googleCloudProject,
-    location: config.googleCloudLocation,
+  const translator = new GtxTranslateService({
     chineseTargetLanguage: config.chineseTargetLanguage,
     timeoutMs: config.translationTimeoutMs,
-    minimumConfidence: config.minimumLanguageConfidence,
   });
   const bot = createTranslationBot({
     token: config.telegramToken,

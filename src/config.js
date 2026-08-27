@@ -18,22 +18,6 @@ function parseTelegramToken(value) {
   return value;
 }
 
-function parseProjectId(value) {
-  if (value.includes("/") || /\s/.test(value)) {
-    throw new Error("GOOGLE_CLOUD_PROJECT không hợp lệ.");
-  }
-
-  return value;
-}
-
-function parseLocation(value) {
-  if (!/^[a-z0-9-]+$/.test(value)) {
-    throw new Error("GOOGLE_CLOUD_LOCATION không hợp lệ.");
-  }
-
-  return value;
-}
-
 function parseTimeout(value) {
   const timeoutMs = Number(value);
 
@@ -66,16 +50,6 @@ function parseBoolean(value, name) {
   throw new Error(`${name} chỉ nhận true hoặc false.`);
 }
 
-function parseConfidence(value) {
-  const confidence = Number(value);
-
-  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
-    throw new Error("MIN_LANGUAGE_CONFIDENCE phải là số từ 0 đến 1.");
-  }
-
-  return confidence;
-}
-
 function parseAllowedChatIds(value = "") {
   const entries = value
     .split(",")
@@ -92,8 +66,6 @@ function parseAllowedChatIds(value = "") {
 
 export function loadConfig(env = process.env) {
   const telegramToken = parseTelegramToken(readRequired(env, "TELEGRAM_BOT_TOKEN"));
-  const googleCloudProject = parseProjectId(readRequired(env, "GOOGLE_CLOUD_PROJECT"));
-  const googleCloudLocation = parseLocation(env.GOOGLE_CLOUD_LOCATION?.trim() || "global");
   const chineseTargetLanguage = env.CHINESE_TARGET_LANGUAGE?.trim() || "zh-CN";
 
   if (!SUPPORTED_CHINESE_TARGETS.has(chineseTargetLanguage)) {
@@ -133,16 +105,11 @@ export function loadConfig(env = process.env) {
 
   return {
     telegramToken,
-    googleCloudProject,
-    googleCloudLocation,
     chineseTargetLanguage,
     allowedChatIds,
     allowAllChats,
     bootstrapOnly: !allowAllChats && allowedChatIds.size === 0,
     translationTimeoutMs: parseTimeout(env.TRANSLATION_TIMEOUT_MS?.trim() || "15000"),
-    minimumLanguageConfidence: parseConfidence(
-      env.MIN_LANGUAGE_CONFIDENCE?.trim() || "0.6",
-    ),
     perChatTranslationsPerMinute,
     globalTranslationsPerMinute,
     maxConcurrentTranslations: parseIntegerInRange(

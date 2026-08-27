@@ -56,3 +56,31 @@
 
 ### Việc còn lại
 - Vẫn cần credential thật để smoke test Telegram và Google Cloud Translation trên môi trường chạy.
+
+## 2026-08-27 — Chuyển sang endpoint Google GTX không cần API key
+
+### Mục tiêu
+- Thay Google Cloud Translation có billing/ADC bằng endpoint GTX do người dùng chỉ định, giữ luồng dịch Trung–Việt và các giới hạn vận hành hiện có.
+
+### Đã thực hiện
+- Thay `GoogleTranslateService` bằng `GtxTranslateService` dùng native `fetch` và `POST application/x-www-form-urlencoded` tới URL hard-code `translate.googleapis.com/translate_a/single`.
+- Gỡ `@google-cloud/translate` cùng toàn bộ cấu hình project, location, credential và confidence; cập nhật lockfile, `.env.example` và README.
+- Dùng Unicode script để chọn chiều dịch. Tiếng Việt rõ ràng dùng `sl=vi`; câu Latin mơ hồ dùng `sl=auto` và chỉ được chấp nhận khi response báo nguồn `vi`; tiếng Trung dùng `sl=zh` để tránh auto-detect sai phồn thể.
+- Thêm parser GTX chặt chẽ, timeout, chặn redirect, kiểm tra status/content type/schema, giới hạn body 256 KB khi đọc stream và không đưa nội dung dịch lên query string hoặc log.
+- Thêm test cho Trung giản thể/phồn thể, Việt có dấu/không dấu, câu Latin mơ hồ, từ chối tiếng Anh/Nhật, multi-segment, timeout/network/HTTP, response hỏng và stream quá lớn.
+
+### Quyết định kỹ thuật
+- Không dùng `tl=cn` vì endpoint âm thầm fallback sang tiếng Anh; chỉ cho phép `vi`, `zh-CN` và `zh-TW` theo chiều dịch.
+- Không tin hoàn toàn `sl=auto`: probe thực tế nhận sai tiếng Việt không dấu và tiếng Trung phồn thể. Kết hợp dấu hiệu tiếng Việt cục bộ với auto-detect cho input Latin mơ hồ để giảm cả false reject lẫn dịch nhầm tiếng Anh.
+- Endpoint GTX là giao diện nội bộ, không có SLA/quota cam kết và bị `robots.txt` chặn; README cảnh báo rõ, production ổn định vẫn nên dùng API chính thức.
+
+### Kiểm tra
+- `npm.cmd ci`: cài sạch 80 package, audit tại bước cài đặt báo 0 vulnerability.
+- `npm.cmd run check` trên Node.js `v24.13.0`: ESLint và 58/58 test pass.
+- Node.js `v22.13.1`: ESLint và 58/58 test pass.
+- Probe POST trực tiếp ban đầu dịch được cả Việt → Trung và Trung → Việt; smoke bằng service hoàn chỉnh sau đó bị Google trả redirect chống bot, được chặn và phân loại thành lỗi provider thay vì parse HTML.
+
+### Việc còn lại
+- Endpoint hiện có thể chặn theo IP/tần suất; không được coi unit test xanh là bằng chứng dịch vụ ngoài đang sẵn sàng.
+- Chưa smoke test Telegram end-to-end vì `.env` không có token; cần điền `TELEGRAM_BOT_TOKEN` và allowlist rồi chạy bot.
+- Heuristic có thể từ chối câu tiếng Việt quá ngắn/không dấu hoặc câu trộn ngôn ngữ khó phân biệt; đây là trade-off để giữ phạm vi chỉ Trung–Việt khi dùng provider không chính thức.

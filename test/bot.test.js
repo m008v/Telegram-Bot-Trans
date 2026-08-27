@@ -64,7 +64,7 @@ test("handler chia bản dịch dài và chỉ reply-reference ở chunk đầu"
   assert.equal(ctx.replies[1].options, undefined);
 });
 
-test("handler báo đúng khi Google phát hiện ngôn ngữ không hỗ trợ", async () => {
+test("handler báo đúng khi provider phát hiện ngôn ngữ không hỗ trợ", async () => {
   const ctx = createContext("Hello world");
   const logEntries = [];
   const translator = {
@@ -165,7 +165,7 @@ test("handler xử lý hai chat song song nhưng giữ queue riêng", async () =
   assert.equal(slowContext.replies[0].text, "dịch:chậm");
 });
 
-test("handler giữ cả typing và Google call trong hard concurrency cap", async () => {
+test("handler giữ cả typing và provider call trong hard concurrency cap", async () => {
   const translationSemaphore = new AsyncSemaphore(3, { maxPending: 6 });
   let activeTyping = 0;
   let maxActiveTyping = 0;

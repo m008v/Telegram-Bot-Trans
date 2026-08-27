@@ -23,7 +23,7 @@ const UNSUPPORTED_INPUT_MESSAGE =
 const UNSUPPORTED_LANGUAGE_MESSAGE =
   "Bot phát hiện ngôn ngữ khác tiếng Trung hoặc tiếng Việt nên không dịch tin nhắn này.";
 const PROVIDER_ERROR_MESSAGE =
-  "Google Dịch đang bận hoặc chưa được cấu hình đúng. Vui lòng thử lại sau.";
+  "Google Dịch miễn phí đang bận, giới hạn hoặc chặn request. Vui lòng thử lại sau.";
 const CAPACITY_ERROR_MESSAGE =
   "Bot đang xử lý nhiều tin nhắn. Vui lòng thử lại sau ít phút.";
 const BOT_COMMAND_PATTERN = /^\/(start|help|id)(?:@([A-Za-z0-9_]+))?(?:\s|$)/u;

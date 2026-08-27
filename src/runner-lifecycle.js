@@ -55,7 +55,7 @@ export async function drainRunnerAndCloseTranslator(runner, translator) {
   if (runnerCleanupError && translatorCloseError) {
     throw new AggregateError(
       [runnerCleanupError, translatorCloseError],
-      "Dừng Telegram runner và đóng Google client đều thất bại.",
+      "Dừng Telegram runner và đóng translation provider đều thất bại.",
     );
   }
 

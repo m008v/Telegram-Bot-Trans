@@ -2,7 +2,7 @@
   "name": "trans-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Telegram bot dịch hai chiều tiếng Trung và tiếng Việt bằng Google Cloud Translation.",
+  "description": "Telegram bot dịch hai chiều tiếng Trung và tiếng Việt qua Google GTX.",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
@@ -17,7 +17,6 @@
   "dependencies": {
     "@grammyjs/auto-retry": "2.0.2",
     "@grammyjs/runner": "2.0.3",
-    "@google-cloud/translate": "10.0.1",
     "grammy": "1.46.0"
   },
   "devDependencies": {

@@ -49,7 +49,7 @@ test("waitForRunnerToDrain dừng chờ khi hết grace period", async () => {
   );
 });
 
-test("shutdown dừng runner, đợi drain rồi mới đóng Google client", async () => {
+test("shutdown dừng runner, đợi drain rồi mới đóng translation provider", async () => {
   const calls = [];
   const runner = {
     isRunning: () => true,
@@ -72,7 +72,7 @@ test("shutdown dừng runner, đợi drain rồi mới đóng Google client", as
   assert.deepEqual(calls, ["stop", "size", "close"]);
 });
 
-test("shutdown giữ cả lỗi runner và lỗi đóng Google client", async () => {
+test("shutdown giữ cả lỗi runner và lỗi đóng translation provider", async () => {
   const runnerError = new Error("runner cleanup failed");
   const closeError = new Error("translator close failed");
   let closeCalls = 0;
