@@ -84,3 +84,25 @@
 - Endpoint hiện có thể chặn theo IP/tần suất; không được coi unit test xanh là bằng chứng dịch vụ ngoài đang sẵn sàng.
 - Chưa smoke test Telegram end-to-end vì `.env` không có token; cần điền `TELEGRAM_BOT_TOKEN` và allowlist rồi chạy bot.
 - Heuristic có thể từ chối câu tiếng Việt quá ngắn/không dấu hoặc câu trộn ngôn ngữ khó phân biệt; đây là trade-off để giữ phạm vi chỉ Trung–Việt khi dùng provider không chính thức.
+
+## 2026-08-29 — Nhận diện từ tiếng Việt cực ngắn
+
+### Mục tiêu
+- Sửa lỗi từ/cảm thán tiếng Việt rất ngắn như `ê` bị gửi với `sl=auto` rồi bị Google nhận sai ngôn ngữ.
+
+### Đã thực hiện
+- Bổ sung nhận diện các chữ `ă`, `đ`, `ơ`, `ư` và ngoại lệ một từ `ê`, `cô`, `hãy` làm bằng chứng tiếng Việt trước khi gọi provider.
+- Thêm regression test xác nhận `ê`, `ơi`, `đi`, `ăn`, `cô`, `hãy` được nhận là tiếng Việt và request dùng `sl=vi`.
+- Giữ test chống nhận nhầm tiếng Anh, Pháp và Bồ Đào Nha như `Hello world`, `être`, `Hôtel`, `não`, `avô`.
+
+### Quyết định kỹ thuật
+- Chỉ mở các dấu hiệu/ngoại lệ hẹp thay vì coi mọi token Latin ngắn là tiếng Việt; cách sau sẽ nhận nhầm các từ như `hi`, `go`, `no`.
+- Với chuỗi `ê` đứng riêng, không thể phân biệt ngôn ngữ chỉ từ Unicode; bot chủ động ưu tiên ngữ cảnh Việt–Trung theo yêu cầu sản phẩm.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 59/59 test pass.
+- Live smoke qua `GtxTranslateService`: `ê` dùng source `vi`, target `zh-CN` và nhận bản dịch `你好`.
+
+### Việc còn lại
+- Cần restart/redeploy tiến trình bot đang chạy để nạp commit mới.
+- `AGENT_MEMORYs copy.md` là bản copy ngoài Git có sẵn trước task; giữ nguyên và không stage.

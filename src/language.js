@@ -10,8 +10,10 @@ const HAN_CHARACTER_PATTERN = /\p{Script=Han}/u;
 const LATIN_CHARACTER_PATTERN = /\p{Script=Latin}/u;
 const JAPANESE_CHARACTER_PATTERN = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const KOREAN_CHARACTER_PATTERN = /\p{Script=Hangul}/u;
+const VIETNAMESE_MARKER_LETTER_PATTERN = /[ăđơư]/iu;
 const DISTINCTIVE_VIETNAMESE_PATTERN =
   /[ảạẻẹỉịỏọủụỷỵắằẳẵặấầẩẫậếềểễệốồổỗộớờởỡợứừửữự]/iu;
+const AMBIGUOUS_SHORT_VIETNAMESE_WORDS = new Set(["cô", "ê", "hãy"]);
 const VIETNAMESE_ASCII_WORDS = new Set([
   "cam",
   "chao",
@@ -81,14 +83,24 @@ export function getSupportedLanguageFamily(languageCode) {
 
 export function hasLikelyVietnameseEvidence(text) {
   const normalizedText = text.normalize("NFC");
+  const words = normalizedText
+    .toLocaleLowerCase("vi-VN")
+    .match(/\p{Script=Latin}+/gu) ?? [];
+
+  if (
+    VIETNAMESE_MARKER_LETTER_PATTERN.test(normalizedText)
+    || (
+      words.length === 1
+      && AMBIGUOUS_SHORT_VIETNAMESE_WORDS.has(words[0])
+    )
+  ) {
+    return true;
+  }
 
   if (DISTINCTIVE_VIETNAMESE_PATTERN.test(normalizedText)) {
     return true;
   }
 
-  const words = normalizedText
-    .toLocaleLowerCase("vi-VN")
-    .match(/\p{Script=Latin}+/gu) ?? [];
   let matchingWords = 0;
 
   for (const word of words) {

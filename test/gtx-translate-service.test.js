@@ -168,6 +168,31 @@ test("tiếng Việt không dấu đủ dấu hiệu dùng source vi thay vì au
   assert.equal(fetchImpl.requests[0].options.body.get("sl"), "vi");
 });
 
+test("từ tiếng Việt cực ngắn dùng source vi thay vì phụ thuộc auto-detect", async () => {
+  const cases = [
+    ["ê", "嘿"],
+    ["ơi", "喂"],
+    ["đi", "去"],
+    ["hãy", "请"],
+  ];
+  const fetchImpl = createFetch(
+    cases.map(([, translatedText]) => createResponse(
+      translationPayload(translatedText),
+    )),
+  );
+  const service = new GtxTranslateService({ fetchImpl });
+
+  for (const [sourceText, translatedText] of cases) {
+    const result = await service.translateBidirectional(sourceText);
+    assert.equal(result.translatedText, translatedText);
+  }
+
+  assert.deepEqual(
+    fetchImpl.requests.map(({ options }) => options.body.get("sl")),
+    cases.map(() => "vi"),
+  );
+});
+
 test("câu Latin mơ hồ dùng auto và chỉ chấp nhận kết quả phát hiện là tiếng Việt", async () => {
   const fetchImpl = createFetch([
     createResponse(translationPayloadWithDetectedLanguage("vi", "再见")),
