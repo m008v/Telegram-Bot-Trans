@@ -28,6 +28,65 @@ function createContext(text, overrides = {}) {
   };
 }
 
+function createCommandHarness(options = {}) {
+  const translator = options.translator ?? {
+    async translateBidirectional(text) {
+      return { translatedText: `dịch:${text}` };
+    },
+  };
+  const bot = createTranslationBot({
+    token: "123456789:abcdefghijklmnopqrstuvwxyz_ABCDE",
+    translator,
+    ...options,
+  });
+  bot.botInfo = {
+    id: 999,
+    is_bot: true,
+    first_name: "Trans Bot",
+    username: "trans_test_bot",
+    can_join_groups: true,
+    can_read_all_group_messages: true,
+    supports_inline_queries: false,
+  };
+  const sentMessages = [];
+  bot.api.config.use(async (_previous, method, payload) => {
+    assert.equal(method, "sendMessage");
+    sentMessages.push(payload);
+    return {
+      ok: true,
+      result: {
+        message_id: sentMessages.length,
+        date: 0,
+        chat: { id: payload.chat_id, type: "supergroup" },
+        text: payload.text,
+      },
+    };
+  });
+
+  const handleMessage = async ({
+    updateId,
+    text,
+    userId = 42,
+    chatId = -100123,
+    chatType = "supergroup",
+    command = false,
+  }) => bot.handleUpdate({
+    update_id: updateId,
+    message: {
+      message_id: updateId,
+      date: 0,
+      chat: { id: chatId, type: chatType, title: "Nhóm test" },
+      from: { id: userId, is_bot: false, first_name: "Tester" },
+      text,
+      ...(command
+        ? { entities: [{ type: "bot_command", offset: 0, length: text.length }] }
+        : {}),
+    },
+  });
+
+  return { bot, handleMessage, sentMessages };
+}
+
 test("handler gửi bản dịch như tin nhắn thường, không reply tin gốc", async () => {
   const ctx = createContext("Xin chào");
   const translator = {
@@ -247,6 +306,100 @@ test("handler giữ cả typing và provider call trong hard concurrency cap", a
   assert.equal(capacityReplies.length, 11);
   assert.equal(translationSemaphore.activeCount, 0);
   assert.equal(translationSemaphore.pendingCount, 0);
+});
+
+test("admin dùng /addchat trong group thì mở quyền ngay cho group đó", async () => {
+  const allowedChatIds = new Set();
+  const persistedChatIds = [];
+  const translatedTexts = [];
+  const { handleMessage, sentMessages } = createCommandHarness({
+    allowedChatIds,
+    adminUserIds: new Set(["42"]),
+    async addAllowedChatId(chatId) {
+      persistedChatIds.push(String(chatId));
+      allowedChatIds.add(String(chatId));
+      return { added: true };
+    },
+    translator: {
+      async translateBidirectional(text) {
+        translatedTexts.push(text);
+        return { translatedText: "你好" };
+      },
+    },
+  });
+
+  await handleMessage({ updateId: 1, text: "/addchat", command: true });
+  await handleMessage({ updateId: 2, text: "Xin chào" });
+
+  assert.deepEqual(persistedChatIds, ["-100123"]);
+  assert.deepEqual(translatedTexts, ["Xin chào"]);
+  assert.match(sentMessages[0].text, /Đã thêm nhóm -100123/u);
+  assert.equal(sentMessages[1].text, "你好");
+});
+
+test("/addchat bỏ qua người không có quyền kể cả khi group đã được phép", async () => {
+  let persistenceCalls = 0;
+  const { handleMessage, sentMessages } = createCommandHarness({
+    allowedChatIds: new Set(["-100123"]),
+    adminUserIds: new Set(["42"]),
+    async addAllowedChatId() {
+      persistenceCalls += 1;
+      return { added: true };
+    },
+  });
+
+  await handleMessage({
+    updateId: 1,
+    text: "/addchat",
+    userId: 84,
+    command: true,
+  });
+
+  assert.equal(persistenceCalls, 0);
+  assert.equal(sentMessages.length, 0);
+});
+
+test("/addchat chỉ nhận group và từ chối khi bot đang public", async () => {
+  let persistenceCalls = 0;
+  const options = {
+    adminUserIds: new Set(["42"]),
+    async addAllowedChatId() {
+      persistenceCalls += 1;
+      return { added: true };
+    },
+  };
+  const privateHarness = createCommandHarness(options);
+  const publicHarness = createCommandHarness({ ...options, allowAllChats: true });
+
+  await privateHarness.handleMessage({
+    updateId: 1,
+    text: "/addchat",
+    chatId: 42,
+    chatType: "private",
+    command: true,
+  });
+  await publicHarness.handleMessage({ updateId: 2, text: "/addchat", command: true });
+
+  assert.equal(persistenceCalls, 0);
+  assert.match(privateHarness.sentMessages[0].text, /chỉ dùng trong nhóm/u);
+  assert.match(publicHarness.sentMessages[0].text, /đang cho phép mọi chat/u);
+});
+
+test("/addchat báo lỗi an toàn nếu không ghi được .env", async () => {
+  const logEntries = [];
+  const { handleMessage, sentMessages } = createCommandHarness({
+    adminUserIds: new Set(["42"]),
+    logger: { error: (entry) => logEntries.push(entry) },
+    async addAllowedChatId() {
+      throw new Error("permission denied: secret-value");
+    },
+  });
+
+  await handleMessage({ updateId: 1, text: "/addchat", command: true });
+
+  assert.equal(logEntries[0].event, "allowed_chat_persist_failed");
+  assert.match(sentMessages[0].text, /Không thể lưu nhóm/u);
+  assert.doesNotMatch(sentMessages[0].text, /secret-value/u);
 });
 
 test("bot hard-timeout HTTP, bỏ command nhắm bot khác và rate-limit command thật", async () => {

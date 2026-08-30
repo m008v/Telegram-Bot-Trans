@@ -26,10 +26,18 @@ const PROVIDER_ERROR_MESSAGE =
   "Google Dịch miễn phí đang bận, giới hạn hoặc chặn request. Vui lòng thử lại sau.";
 const CAPACITY_ERROR_MESSAGE =
   "Bot đang xử lý nhiều tin nhắn. Vui lòng thử lại sau ít phút.";
-const BOT_COMMAND_PATTERN = /^\/(start|help|id)(?:@([A-Za-z0-9_]+))?(?:\s|$)/u;
+const BOT_COMMAND_PATTERN = /^\/(start|help|id|addchat)(?:@([A-Za-z0-9_]+))?(?:\s|$)/u;
 
 function isChatAllowed(chatId, allowedChatIds, allowAllChats) {
   return allowAllChats || allowedChatIds.has(String(chatId));
+}
+
+function isAdminUser(userId, adminUserIds) {
+  return userId !== undefined && adminUserIds.has(String(userId));
+}
+
+function isGroupChat(chat) {
+  return chat?.type === "group" || chat?.type === "supergroup";
 }
 
 function getKnownBotCommand(ctx) {
@@ -155,6 +163,8 @@ export function createTranslationBot({
   token,
   translator,
   allowedChatIds = new Set(),
+  adminUserIds = new Set(),
+  addAllowedChatId,
   allowAllChats = false,
   perChatTranslationsPerMinute = 20,
   globalTranslationsPerMinute = 120,
@@ -187,15 +197,21 @@ export function createTranslationBot({
     const chatAllowed = isChatAllowed(ctx.chat.id, allowedChatIds, allowAllChats);
     const knownCommand = getKnownBotCommand(ctx);
     if (knownCommand) {
+      const adminCommandAllowed = knownCommand === "addchat"
+        && isAdminUser(ctx.from?.id, adminUserIds);
+      if (knownCommand === "addchat" && !adminCommandAllowed) {
+        return;
+      }
+
+      if (!chatAllowed && knownCommand !== "id" && !adminCommandAllowed) {
+        return;
+      }
+
       if (!commandLimiter.tryAcquire(ctx.chat.id).allowed) {
         return;
       }
 
-      if (chatAllowed || knownCommand === "id") {
-        return next();
-      }
-
-      return;
+      return next();
     }
 
     if (chatAllowed) {
@@ -208,6 +224,51 @@ export function createTranslationBot({
   bot.command("start", (ctx) => ctx.reply(START_MESSAGE));
   bot.command("help", (ctx) => ctx.reply(START_MESSAGE));
   bot.command("id", (ctx) => ctx.reply(`Chat ID: ${ctx.chat.id}`));
+  bot.command("addchat", async (ctx) => {
+    if (!isAdminUser(ctx.from?.id, adminUserIds)) {
+      return;
+    }
+
+    if (!isGroupChat(ctx.chat)) {
+      await ctx.reply("Lệnh /addchat chỉ dùng trong nhóm hoặc siêu nhóm Telegram.");
+      return;
+    }
+
+    if (allowAllChats) {
+      await ctx.reply(
+        "Bot đang cho phép mọi chat; hãy tắt TELEGRAM_ALLOW_ALL_CHATS trước khi dùng allowlist.",
+      );
+      return;
+    }
+
+    if (typeof addAllowedChatId !== "function") {
+      logger.error({
+        event: "allowed_chat_store_missing",
+        chatId: String(ctx.chat.id),
+        userId: String(ctx.from.id),
+      });
+      await ctx.reply("Bot chưa được cấu hình nơi lưu allowlist. Không thể thêm nhóm này.");
+      return;
+    }
+
+    let result;
+    try {
+      result = await addAllowedChatId(ctx.chat.id);
+    } catch (error) {
+      logger.error({
+        event: "allowed_chat_persist_failed",
+        chatId: String(ctx.chat.id),
+        userId: String(ctx.from.id),
+        error: toSafeError(error),
+      });
+      await ctx.reply("Không thể lưu nhóm vào allowlist. Vui lòng kiểm tra log và thử lại.");
+      return;
+    }
+
+    await ctx.reply(result.added
+      ? `Đã thêm nhóm ${ctx.chat.id} vào TELEGRAM_ALLOWED_CHAT_IDS.`
+      : `Nhóm ${ctx.chat.id} đã có trong TELEGRAM_ALLOWED_CHAT_IDS.`);
+  });
   bot.on("message:text", createTextMessageHandler({
     translator,
     rateLimiter,

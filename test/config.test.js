@@ -14,6 +14,7 @@ test("loadConfig áp dụng giá trị mặc định an toàn", () => {
   assert.equal(config.chineseTargetLanguage, "zh-CN");
   assert.equal(config.translationTimeoutMs, 15_000);
   assert.deepEqual([...config.allowedChatIds], ["123"]);
+  assert.deepEqual([...config.adminUserIds], []);
   assert.equal(config.allowAllChats, false);
   assert.equal(config.perChatTranslationsPerMinute, 20);
   assert.equal(config.globalTranslationsPerMinute, 120);
@@ -26,11 +27,13 @@ test("loadConfig chuẩn hóa allowlist chat", () => {
     TELEGRAM_ALLOWED_CHAT_IDS: "123, -100456,123",
     CHINESE_TARGET_LANGUAGE: "zh-TW",
     TRANSLATION_TIMEOUT_MS: "5000",
+    TELEGRAM_ADMIN_IDS: "42, 84,42",
   });
 
   assert.deepEqual([...config.allowedChatIds], ["123", "-100456"]);
   assert.equal(config.chineseTargetLanguage, "zh-TW");
   assert.equal(config.translationTimeoutMs, 5_000);
+  assert.deepEqual([...config.adminUserIds], ["42", "84"]);
 });
 
 test("loadConfig từ chối cấu hình thiếu hoặc sai định dạng", () => {
@@ -38,6 +41,10 @@ test("loadConfig từ chối cấu hình thiếu hoặc sai định dạng", () 
   assert.throws(
     () => loadConfig({ ...VALID_ENV, TELEGRAM_ALLOWED_CHAT_IDS: "abc" }),
     /chat ID không hợp lệ/u,
+  );
+  assert.throws(
+    () => loadConfig({ ...VALID_ENV, TELEGRAM_ADMIN_IDS: "-42" }),
+    /user ID không hợp lệ/u,
   );
   assert.throws(
     () => loadConfig({ ...VALID_ENV, CHINESE_TARGET_LANGUAGE: "zh" }),

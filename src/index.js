@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import {
   clearTimeout as cancelTimeout,
   setTimeout as scheduleTimeout,
@@ -5,6 +6,7 @@ import {
 
 import { run } from "@grammyjs/runner";
 
+import { AllowedChatStore } from "./allowed-chat-store.js";
 import { createTranslationBot } from "./bot.js";
 import { loadConfig } from "./config.js";
 import { GtxTranslateService } from "./gtx-translate-service.js";
@@ -22,10 +24,16 @@ async function main() {
     chineseTargetLanguage: config.chineseTargetLanguage,
     timeoutMs: config.translationTimeoutMs,
   });
+  const allowedChatStore = new AllowedChatStore({
+    filePath: resolve(process.cwd(), ".env"),
+    allowedChatIds: config.allowedChatIds,
+  });
   const bot = createTranslationBot({
     token: config.telegramToken,
     translator,
     allowedChatIds: config.allowedChatIds,
+    adminUserIds: config.adminUserIds,
+    addAllowedChatId: (chatId) => allowedChatStore.add(chatId),
     allowAllChats: config.allowAllChats,
     perChatTranslationsPerMinute: config.perChatTranslationsPerMinute,
     globalTranslationsPerMinute: config.globalTranslationsPerMinute,
@@ -80,6 +88,7 @@ async function main() {
         event: "bot_starting",
         username: botInfo.username,
         allowedChatCount: config.allowedChatIds.size,
+        adminCount: config.adminUserIds.size,
         allowAllChats: config.allowAllChats,
         bootstrapOnly: config.bootstrapOnly,
         chineseTargetLanguage: config.chineseTargetLanguage,

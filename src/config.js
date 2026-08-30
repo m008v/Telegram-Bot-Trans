@@ -64,6 +64,20 @@ function parseAllowedChatIds(value = "") {
   return new Set(entries);
 }
 
+function parseAdminUserIds(value = "") {
+  const entries = value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const invalidEntry = entries.find((entry) => !/^[1-9]\d*$/u.test(entry));
+  if (invalidEntry) {
+    throw new Error(`TELEGRAM_ADMIN_IDS chứa user ID không hợp lệ: ${invalidEntry}`);
+  }
+
+  return new Set(entries);
+}
+
 export function loadConfig(env = process.env) {
   const telegramToken = parseTelegramToken(readRequired(env, "TELEGRAM_BOT_TOKEN"));
   const chineseTargetLanguage = env.CHINESE_TARGET_LANGUAGE?.trim() || "zh-CN";
@@ -73,6 +87,7 @@ export function loadConfig(env = process.env) {
   }
 
   const allowedChatIds = parseAllowedChatIds(env.TELEGRAM_ALLOWED_CHAT_IDS);
+  const adminUserIds = parseAdminUserIds(env.TELEGRAM_ADMIN_IDS);
   const allowAllChats = parseBoolean(
     env.TELEGRAM_ALLOW_ALL_CHATS?.trim() || "false",
     "TELEGRAM_ALLOW_ALL_CHATS",
@@ -107,6 +122,7 @@ export function loadConfig(env = process.env) {
     telegramToken,
     chineseTargetLanguage,
     allowedChatIds,
+    adminUserIds,
     allowAllChats,
     bootstrapOnly: !allowAllChats && allowedChatIds.size === 0,
     translationTimeoutMs: parseTimeout(env.TRANSLATION_TIMEOUT_MS?.trim() || "15000"),

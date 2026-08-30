@@ -129,3 +129,31 @@
 ### Việc còn lại
 - Cần restart/redeploy tiến trình bot đang chạy để nạp commit mới.
 - `AGENT_MEMORYs copy.md` ngoài Git tiếp tục được giữ nguyên và không stage.
+
+## 2026-08-30 — Cho phép admin tự thêm group vào allowlist
+
+### Mục tiêu
+- Cho phép cấu hình Telegram user ID của admin trong `.env`; admin dùng `/addchat` trong group để thêm chat đó vào `TELEGRAM_ALLOWED_CHAT_IDS`.
+
+### Đã thực hiện
+- Thêm `TELEGRAM_ADMIN_IDS`, validate danh sách user ID dương và truyền quyền admin vào bot.
+- Thêm `/addchat` cho group/supergroup; người không có quyền bị bỏ qua, chế độ public bị từ chối và lỗi ghi file chỉ trả thông báo an toàn.
+- Thêm `AllowedChatStore` cập nhật `.env` theo kiểu atomic, ghi tuần tự để tránh mất update đồng thời, giữ cấu hình/comment khác và cập nhật `Set` trong RAM sau khi ghi thành công.
+- Đăng ký command với Telegram, cập nhật `.env.example`, README và regression test cho config, authorization, persistence, concurrency và UTF-8 lỗi.
+
+### Quyết định kỹ thuật
+- So sánh Telegram ID dưới dạng chuỗi để không phụ thuộc giới hạn safe integer của JavaScript.
+- Chỉ mở quyền trong RAM sau khi rename `.env` thành công; nếu ghi lỗi thì fail-closed và không làm group được phép tạm thời.
+- Không cho `/addchat` chạy khi `TELEGRAM_ALLOW_ALL_CHATS=true` vì cấu hình public và allowlist loại trừ nhau.
+- File tạm nằm cùng thư mục để rename atomic, dùng mode `0600` khi tạo mới và tên `.env.*.tmp` tiếp tục được `.gitignore` che nếu tiến trình chết giữa lúc ghi.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 69/69 test pass trên Node.js `v24.13.0`.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: 0 vulnerability.
+- Test persistence thật trên file tạm Windows pass, gồm hai update đồng thời, duplicate, không để file tạm và từ chối `.env` sai UTF-8 mà không mở quyền trong RAM.
+- Lần thử chạy Node.js `v22.13.1` chưa bắt đầu được vì cache `npx` lỗi `ENOENT`; đây là lỗi tooling, không phải test fail.
+
+### Việc còn lại
+- Điền Telegram user ID thật vào `TELEGRAM_ADMIN_IDS` trong `.env` rồi restart bot để nạp quyền admin; không có ID thật nào được commit.
+- Chưa smoke test với Telegram thật vì không sử dụng token trong `.env` ở task này.
+- `AGENT_MEMORYs copy.md` ngoài Git tiếp tục được giữ nguyên và không stage.
