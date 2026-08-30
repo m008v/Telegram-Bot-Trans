@@ -20,8 +20,6 @@ const START_MESSAGE = [
 
 const UNSUPPORTED_INPUT_MESSAGE =
   "Bot chỉ dịch văn bản tiếng Trung ↔ tiếng Việt. Hãy gửi một câu có nội dung rõ ràng.";
-const UNSUPPORTED_LANGUAGE_MESSAGE =
-  "Bot phát hiện ngôn ngữ khác tiếng Trung hoặc tiếng Việt nên không dịch tin nhắn này.";
 const PROVIDER_ERROR_MESSAGE =
   "Google Dịch miễn phí đang bận, giới hạn hoặc chặn request. Vui lòng thử lại sau.";
 const CAPACITY_ERROR_MESSAGE =
@@ -152,10 +150,6 @@ function getUserFacingError(error) {
     return UNSUPPORTED_INPUT_MESSAGE;
   }
 
-  if (error instanceof UnsupportedLanguageError) {
-    return UNSUPPORTED_LANGUAGE_MESSAGE;
-  }
-
   if (error instanceof TranslationCapacityError) {
     return CAPACITY_ERROR_MESSAGE;
   }
@@ -220,6 +214,10 @@ export function createTextMessageHandler({
           ? await translationSemaphore.run(translate)
           : await translate();
       } catch (error) {
+        if (error instanceof UnsupportedLanguageError) {
+          return;
+        }
+
         if (!isExpectedUserError(error)) {
           logger.error({
             event: "translation_failed",

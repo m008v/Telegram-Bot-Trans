@@ -207,3 +207,24 @@
 ### Việc còn lại
 - Chưa smoke test `getChat` với Telegram thật; bot đang chạy cần restart/redeploy để nạp thay đổi.
 - `.env.example`, `AGENT_MEMORYs copy.md` và `src.zip` tiếp tục được giữ nguyên ngoài commit task.
+
+## 2026-08-30 — Im lặng với ngôn ngữ không hỗ trợ
+
+### Mục tiêu
+- Loại bỏ tin nhắn cảnh báo khi bot phát hiện nội dung ngoài tiếng Trung hoặc tiếng Việt.
+
+### Đã thực hiện
+- Cho `UnsupportedLanguageError` kết thúc handler mà không gửi tin nhắn vào chat và không ghi log lỗi provider.
+- Giữ nguyên thông báo cho input vô nghĩa, quá tải và lỗi Google GTX để lỗi vận hành thật không bị che.
+- Cập nhật README và regression test cho hành vi bỏ qua im lặng.
+
+### Quyết định kỹ thuật
+- Chỉ bỏ phản hồi của nhánh ngôn ngữ không hỗ trợ; không nuốt mọi exception vì như vậy sẽ biến lỗi API thành lỗi câm, loại drama khó debug nhất.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 77/77 test pass trên Node.js `v24.13.0`.
+- `git diff --check` pass.
+
+### Việc còn lại
+- Cần restart/redeploy tiến trình bot để nạp hành vi mới.
+- `.env.example` và `AGENT_MEMORYs copy.md` là thay đổi/file có sẵn trước task; không stage vào commit này.

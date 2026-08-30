@@ -135,7 +135,7 @@ test("handler chia bản dịch dài và gửi mọi chunk như tin nhắn thư�
   assert.equal(ctx.replies[1].options, undefined);
 });
 
-test("handler báo đúng khi provider phát hiện ngôn ngữ không hỗ trợ", async () => {
+test("handler im lặng khi provider phát hiện ngôn ngữ không hỗ trợ", async () => {
   const ctx = createContext("Hello world");
   const logEntries = [];
   const translator = {
@@ -150,8 +150,7 @@ test("handler báo đúng khi provider phát hiện ngôn ngữ không hỗ tr�
 
   await handler(ctx);
 
-  assert.match(ctx.replies[0].text, /ngôn ngữ khác/u);
-  assert.equal(ctx.replies[0].options, undefined);
+  assert.equal(ctx.replies.length, 0);
   assert.equal(logEntries.length, 0);
 });
 

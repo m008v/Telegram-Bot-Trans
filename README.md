@@ -90,7 +90,7 @@ Telegram mặc định bật privacy mode, khiến bot trong group không nhận
 2. Chọn bot → `Disable`.
 3. Xóa bot khỏi group rồi thêm lại nếu Telegram chưa áp dụng thay đổi.
 
-Bot bỏ qua tin nhắn của bot khác và command để tránh loop. Bản dịch được gửi dạng plain text, không render HTML từ nội dung người dùng. Với group đông, nên giữ privacy mode và yêu cầu thành viên nhắn riêng cho bot.
+Bot bỏ qua tin nhắn của bot khác, command và ngôn ngữ ngoài tiếng Trung/Việt để tránh loop hoặc làm loãng cuộc trò chuyện. Bản dịch được gửi dạng plain text, không render HTML từ nội dung người dùng. Với group đông, nên giữ privacy mode và yêu cầu thành viên nhắn riêng cho bot.
 
 ## Kiểm tra
 
