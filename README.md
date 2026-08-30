@@ -66,9 +66,9 @@ Dùng `/id` để lấy chat ID cần đưa vào allowlist. Riêng `/id` và cá
 
 - `/addchat` trong group để thêm group hiện tại.
 - `/unchat` trong group để xoá group hiện tại.
-- `/list` trong bất kỳ chat nào để xem các chat/group đang được phép theo ID.
+- `/list` trong bất kỳ chat nào để xem tên và ID của các chat/group đang được phép.
 
-Bot chỉ chấp nhận ba lệnh trên từ đúng user ID đã cấu hình, cập nhật `.env` theo kiểu atomic và áp dụng thay đổi ngay không cần restart. Nếu chưa biết user ID, nhắn riêng `/id` cho bot; trong private chat, Chat ID chính là user ID. Các lệnh quản trị allowlist không dùng được khi `TELEGRAM_ALLOW_ALL_CHATS=true` vì chế độ public và allowlist loại trừ nhau.
+Bot chỉ chấp nhận ba lệnh trên từ đúng user ID đã cấu hình, cập nhật `.env` theo kiểu atomic và áp dụng thay đổi ngay không cần restart. `/list` lấy tên hiện tại bằng Telegram `getChat`; nếu bot không còn truy cập được một chat, dòng đó vẫn giữ ID và hiển thị `Không lấy được tên`. Nếu chưa biết user ID, nhắn riêng `/id` cho bot; trong private chat, Chat ID chính là user ID. Các lệnh quản trị allowlist không dùng được khi `TELEGRAM_ALLOW_ALL_CHATS=true` vì chế độ public và allowlist loại trừ nhau.
 
 ## Cách xác định chiều dịch
 

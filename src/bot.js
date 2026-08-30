@@ -31,6 +31,9 @@ const BOT_COMMAND_PATTERN =
 const ADMIN_COMMANDS = new Set(["addchat", "unchat", "list"]);
 const PUBLIC_MODE_ALLOWLIST_MESSAGE =
   "Bot đang cho phép mọi chat; hãy tắt TELEGRAM_ALLOW_ALL_CHATS trước khi dùng allowlist.";
+const CHAT_LOOKUP_CONCURRENCY = 4;
+const CHAT_LOOKUP_TIMEOUT_MS = 10_000;
+const MAX_CHAT_DISPLAY_NAME_LENGTH = 120;
 
 function isChatAllowed(chatId, allowedChatIds, allowAllChats) {
   return allowAllChats || allowedChatIds.has(String(chatId));
@@ -44,14 +47,77 @@ function isGroupChat(chat) {
   return chat?.type === "group" || chat?.type === "supergroup";
 }
 
-function formatAllowedChatList(allowedChatIds) {
-  if (allowedChatIds.size === 0) {
+function normalizeChatDisplayName(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const normalized = value
+    .replace(/[\u202a-\u202e\u2066-\u2069]/giu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const characters = Array.from(normalized);
+  if (characters.length <= MAX_CHAT_DISPLAY_NAME_LENGTH) {
+    return normalized;
+  }
+
+  return `${characters.slice(0, MAX_CHAT_DISPLAY_NAME_LENGTH - 1).join("")}…`;
+}
+
+function getChatDisplayName(chat) {
+  const title = normalizeChatDisplayName(chat?.title);
+  if (title) {
+    return title;
+  }
+
+  const fullName = normalizeChatDisplayName(
+    [chat?.first_name, chat?.last_name].filter(Boolean).join(" "),
+  );
+  if (fullName) {
+    return fullName;
+  }
+
+  const username = normalizeChatDisplayName(chat?.username);
+  return username ? `@${username}` : "Không lấy được tên";
+}
+
+async function resolveAllowedChatEntries(chatIds, getChat, logger, secrets) {
+  const entries = new Array(chatIds.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < chatIds.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const chatId = chatIds[index];
+
+      try {
+        const chat = await getChat(chatId);
+        entries[index] = { chatId, name: getChatDisplayName(chat) };
+      } catch (error) {
+        logger.warn?.({
+          event: "allowed_chat_lookup_failed",
+          chatId,
+          error: toSafeError(error, secrets),
+        });
+        entries[index] = { chatId, name: "Không lấy được tên" };
+      }
+    }
+  }
+
+  const workerCount = Math.min(CHAT_LOOKUP_CONCURRENCY, chatIds.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return entries;
+}
+
+function formatAllowedChatList(entries) {
+  if (entries.length === 0) {
     return "Chưa có chat hoặc nhóm nào trong TELEGRAM_ALLOWED_CHAT_IDS.";
   }
 
   return [
-    `Các chat/nhóm đang được phép dùng bot (${allowedChatIds.size}):`,
-    ...[...allowedChatIds].map((chatId) => `- ${chatId}`),
+    `Các chat/nhóm đang được phép dùng bot (${entries.length}):`,
+    ...entries.map(({ chatId, name }) => `- ${name} — ID: ${chatId}`),
   ].join("\n");
 }
 
@@ -339,7 +405,15 @@ export function createTranslationBot({
       return;
     }
 
-    const chunks = splitTelegramMessage(formatAllowedChatList(allowedChatIds));
+    const chatIds = [...allowedChatIds];
+    const lookupSignal = AbortSignal.timeout(CHAT_LOOKUP_TIMEOUT_MS);
+    const entries = await resolveAllowedChatEntries(
+      chatIds,
+      (chatId) => ctx.api.getChat(chatId, lookupSignal),
+      logger,
+      [token],
+    );
+    const chunks = splitTelegramMessage(formatAllowedChatList(entries));
     for (const chunk of chunks) {
       await ctx.reply(chunk);
     }

@@ -183,3 +183,27 @@
 - Chưa smoke test Telegram thật để tránh dùng token hoặc thay đổi command menu của bot đang chạy trong lượt kiểm tra local.
 - Cần restart/redeploy bot để nạp command mới; startup tiếp theo sẽ đồng bộ menu qua `setMyCommands`.
 - `.env.example`, `AGENT_MEMORYs copy.md` và `src.zip` là thay đổi/file có sẵn trước task; không stage vào commit này.
+
+## 2026-08-30 — Hiển thị tên chat trong `/list`
+
+### Mục tiêu
+- Sửa `/list` để hiển thị tên nhóm/chat cùng ID thay vì chỉ có ID khó nhận biết.
+
+### Đã thực hiện
+- Resolve metadata hiện tại của từng allowlist entry bằng Telegram `getChat`, hỗ trợ title của group/channel và họ tên hoặc username của private chat.
+- Giới hạn bốn lookup song song và dùng chung timeout 10 giây; một lookup lỗi chỉ fallback `Không lấy được tên` cho đúng ID đó.
+- Chuẩn hoá whitespace, loại ký tự bidi điều khiển và giới hạn độ dài tên trước khi ghép plain text vào danh sách.
+- Cập nhật README và test cho tên group/private, thứ tự kết quả, fallback lỗi, che token, concurrency cap và danh sách dài.
+
+### Quyết định kỹ thuật
+- Yêu cầu hiển thị tên thay thế quyết định chỉ liệt kê ID của task trước; không persist tên vào `.env` để tránh dữ liệu nhanh lỗi thời và format cấu hình phình thêm.
+- Không log tên chat; log lookup lỗi chỉ chứa chat ID và error đã qua `toSafeError` với bot token được redaction.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 77/77 test pass trên Node.js `v24.13.0`.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: 0 vulnerability.
+- `git diff --check` và strict UTF-8/mojibake scan pass; secret scan chỉ khớp Telegram token fixture có chủ đích trong regression test redaction.
+
+### Việc còn lại
+- Chưa smoke test `getChat` với Telegram thật; bot đang chạy cần restart/redeploy để nạp thay đổi.
+- `.env.example`, `AGENT_MEMORYs copy.md` và `src.zip` tiếp tục được giữ nguyên ngoài commit task.

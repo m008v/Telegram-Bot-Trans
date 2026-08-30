@@ -29,6 +29,11 @@ function createContext(text, overrides = {}) {
 }
 
 function createCommandHarness(options = {}) {
+  const getChat = options.getChat ?? ((chatId) => ({
+    id: chatId,
+    type: "supergroup",
+    title: `Nhóm ${chatId}`,
+  }));
   const translator = options.translator ?? {
     async translateBidirectional(text) {
       return { translatedText: `dịch:${text}` };
@@ -49,7 +54,14 @@ function createCommandHarness(options = {}) {
     supports_inline_queries: false,
   };
   const sentMessages = [];
+  const getChatCalls = [];
   bot.api.config.use(async (_previous, method, payload) => {
+    if (method === "getChat") {
+      const chatId = String(payload.chat_id);
+      getChatCalls.push(chatId);
+      return { ok: true, result: await getChat(chatId) };
+    }
+
     assert.equal(method, "sendMessage");
     sentMessages.push(payload);
     return {
@@ -84,7 +96,7 @@ function createCommandHarness(options = {}) {
     },
   });
 
-  return { bot, handleMessage, sentMessages };
+  return { bot, getChatCalls, handleMessage, sentMessages };
 }
 
 test("handler gửi bản dịch như tin nhắn thường, không reply tin gốc", async () => {
@@ -451,9 +463,21 @@ test("/unchat chỉ nhận group, từ chối chế độ public và báo khi nh
 
 test("/list cho admin xem allowlist kể cả từ private chat chưa được phép", async () => {
   const allowedChatIds = new Set(["-100123", "-100456"]);
-  const { handleMessage, sentMessages } = createCommandHarness({
+  const { getChatCalls, handleMessage, sentMessages } = createCommandHarness({
     allowedChatIds,
     adminUserIds: new Set(["42"]),
+    getChat(chatId) {
+      if (chatId === "-100123") {
+        return { id: chatId, type: "supergroup", title: "\u202eNhóm Alpha\n nội bộ" };
+      }
+
+      return {
+        id: chatId,
+        type: "private",
+        first_name: "Minh",
+        last_name: "Huy",
+      };
+    },
   });
 
   await handleMessage({
@@ -466,8 +490,9 @@ test("/list cho admin xem allowlist kể cả từ private chat chưa được p
 
   assert.equal(sentMessages.length, 1);
   assert.match(sentMessages[0].text, /được phép dùng bot \(2\)/u);
-  assert.match(sentMessages[0].text, /- -100123/u);
-  assert.match(sentMessages[0].text, /- -100456/u);
+  assert.match(sentMessages[0].text, /- Nhóm Alpha nội bộ — ID: -100123/u);
+  assert.match(sentMessages[0].text, /- Minh Huy — ID: -100456/u);
+  assert.deepEqual(getChatCalls, ["-100123", "-100456"]);
 });
 
 test("/list báo allowlist rỗng, chế độ public và chia danh sách dài an toàn", async () => {
@@ -476,11 +501,20 @@ test("/list báo allowlist rỗng, chế độ public và chia danh sách dài a
     adminUserIds: new Set(["42"]),
     allowAllChats: true,
   });
+  let activeLookups = 0;
+  let maxActiveLookups = 0;
   const longHarness = createCommandHarness({
     allowedChatIds: new Set(
       Array.from({ length: 500 }, (_, index) => `-10012345${String(index).padStart(3, "0")}`),
     ),
     adminUserIds: new Set(["42"]),
+    async getChat(chatId) {
+      activeLookups += 1;
+      maxActiveLookups = Math.max(maxActiveLookups, activeLookups);
+      await Promise.resolve();
+      activeLookups -= 1;
+      return { id: chatId, type: "supergroup", title: `Nhóm ${chatId}` };
+    },
   });
 
   await emptyHarness.handleMessage({ updateId: 1, text: "/list", command: true });
@@ -489,8 +523,43 @@ test("/list báo allowlist rỗng, chế độ public và chia danh sách dài a
 
   assert.match(emptyHarness.sentMessages[0].text, /Chưa có chat hoặc nhóm/u);
   assert.match(publicHarness.sentMessages[0].text, /đang cho phép mọi chat/u);
+  assert.equal(emptyHarness.getChatCalls.length, 0);
+  assert.equal(publicHarness.getChatCalls.length, 0);
+  assert.equal(maxActiveLookups, 4);
   assert.ok(longHarness.sentMessages.length > 1);
   assert.ok(longHarness.sentMessages.every(({ text }) => Array.from(text).length <= 3_900));
+});
+
+test("/list giữ ID và tiếp tục khi Telegram không trả được tên chat", async () => {
+  const logEntries = [];
+  const { handleMessage, sentMessages } = createCommandHarness({
+    allowedChatIds: new Set(["-100123", "-100456"]),
+    adminUserIds: new Set(["42"]),
+    logger: {
+      error() {},
+      warn: (entry) => logEntries.push(entry),
+    },
+    getChat(chatId) {
+      if (chatId === "-100456") {
+        throw new Error(
+          "Telegram lỗi với token 123456789:abcdefghijklmnopqrstuvwxyz_ABCDE",
+        );
+      }
+
+      return { id: chatId, type: "supergroup", title: "Nhóm còn hoạt động" };
+    },
+  });
+
+  await handleMessage({ updateId: 1, text: "/list", command: true });
+
+  assert.match(sentMessages[0].text, /Nhóm còn hoạt động — ID: -100123/u);
+  assert.match(sentMessages[0].text, /Không lấy được tên — ID: -100456/u);
+  assert.equal(logEntries[0].event, "allowed_chat_lookup_failed");
+  assert.equal(logEntries[0].chatId, "-100456");
+  assert.doesNotMatch(
+    logEntries[0].error.message,
+    /123456789:abcdefghijklmnopqrstuvwxyz_ABCDE/u,
+  );
 });
 
 test("/addchat báo lỗi an toàn nếu không ghi được .env", async () => {
