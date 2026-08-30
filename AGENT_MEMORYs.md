@@ -106,3 +106,26 @@
 ### Việc còn lại
 - Cần restart/redeploy tiến trình bot đang chạy để nạp commit mới.
 - `AGENT_MEMORYs copy.md` là bản copy ngoài Git có sẵn trước task; giữ nguyên và không stage.
+
+## 2026-08-30 — Gửi bản dịch như tin nhắn thường
+
+### Mục tiêu
+- Bỏ giao diện reply/quote tin nhắn gốc; bản dịch và thông báo của bot phải xuất hiện như tin nhắn mới trong chat.
+
+### Đã thực hiện
+- Xóa toàn bộ `reply_parameters` khỏi bản dịch, các chunk dài, lỗi dịch và cảnh báo rate-limit.
+- Cập nhật nội dung `/start` để mô tả đúng hành vi gửi bản dịch thành tin nhắn mới.
+- Thêm regression test xác nhận mọi nhánh trên gọi Telegram mà không truyền reply options.
+
+### Quyết định kỹ thuật
+- Tiếp tục dùng `ctx.reply()` của grammY vì đây là helper gửi `sendMessage`; chỉ `reply_parameters` mới tạo UI reply vào một message cụ thể.
+- Không thay đổi queue, rate limit, chia chunk hoặc retry Telegram để giữ nguyên hành vi ngoài phạm vi giao diện.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 60/60 test pass.
+- Node.js `v22.13.1`: ESLint và 60/60 test pass.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: 0 vulnerability.
+
+### Việc còn lại
+- Cần restart/redeploy tiến trình bot đang chạy để nạp commit mới.
+- `AGENT_MEMORYs copy.md` ngoài Git tiếp tục được giữ nguyên và không stage.

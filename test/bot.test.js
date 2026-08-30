@@ -28,7 +28,7 @@ function createContext(text, overrides = {}) {
   };
 }
 
-test("handler dịch và reply trực tiếp vào tin nhắn gốc", async () => {
+test("handler gửi bản dịch như tin nhắn thường, không reply tin gốc", async () => {
   const ctx = createContext("Xin chào");
   const translator = {
     async translateBidirectional(text) {
@@ -43,10 +43,10 @@ test("handler dịch và reply trực tiếp vào tin nhắn gốc", async () =>
   assert.deepEqual(ctx.chatActions, ["typing"]);
   assert.equal(ctx.replies.length, 1);
   assert.equal(ctx.replies[0].text, "你好");
-  assert.equal(ctx.replies[0].options.reply_parameters.message_id, 456);
+  assert.equal(ctx.replies[0].options, undefined);
 });
 
-test("handler chia bản dịch dài và chỉ reply-reference ở chunk đầu", async () => {
+test("handler chia bản dịch dài và gửi mọi chunk như tin nhắn thường", async () => {
   const ctx = createContext("dịch đoạn dài");
   const translator = {
     async translateBidirectional() {
@@ -60,7 +60,7 @@ test("handler chia bản dịch dài và chỉ reply-reference ở chunk đầu"
   assert.equal(ctx.replies.length, 2);
   assert.equal(Array.from(ctx.replies[0].text).length, 3_900);
   assert.equal(Array.from(ctx.replies[1].text).length, 100);
-  assert.equal(ctx.replies[0].options.reply_parameters.message_id, 456);
+  assert.equal(ctx.replies[0].options, undefined);
   assert.equal(ctx.replies[1].options, undefined);
 });
 
@@ -80,6 +80,7 @@ test("handler báo đúng khi provider phát hiện ngôn ngữ không hỗ tr�
   await handler(ctx);
 
   assert.match(ctx.replies[0].text, /ngôn ngữ khác/u);
+  assert.equal(ctx.replies[0].options, undefined);
   assert.equal(logEntries.length, 0);
 });
 
@@ -101,7 +102,35 @@ test("handler báo bận nhưng không log như lỗi provider khi semaphore đ�
   await handler(ctx);
 
   assert.match(ctx.replies[0].text, /đang xử lý nhiều/u);
+  assert.equal(ctx.replies[0].options, undefined);
   assert.equal(logEntries.length, 0);
+});
+
+test("handler gửi cảnh báo rate-limit như tin nhắn thường", async () => {
+  const ctx = createContext("Xin chào");
+  let translationCalls = 0;
+  const translator = {
+    async translateBidirectional() {
+      translationCalls += 1;
+      return { translatedText: "unused" };
+    },
+  };
+  const rateLimiter = {
+    tryAcquire() {
+      return {
+        allowed: false,
+        retryAfterSeconds: 12,
+        shouldNotify: true,
+      };
+    },
+  };
+  const handler = createTextMessageHandler({ translator, rateLimiter });
+
+  await handler(ctx);
+
+  assert.equal(translationCalls, 0);
+  assert.match(ctx.replies[0].text, /12 giây/u);
+  assert.equal(ctx.replies[0].options, undefined);
 });
 
 test("handler bỏ qua command và tin nhắn do bot gửi", async () => {

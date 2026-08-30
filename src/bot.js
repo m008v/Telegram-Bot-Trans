@@ -15,7 +15,7 @@ import { TranslationRateLimiter } from "./translation-rate-limiter.js";
 const START_MESSAGE = [
   "Gửi tiếng Việt để dịch sang tiếng Trung, hoặc gửi tiếng Trung để dịch sang tiếng Việt.",
   "",
-  "Bot chỉ xử lý tin nhắn văn bản và sẽ trả lời ngay dưới tin nhắn gốc.",
+  "Bot chỉ xử lý tin nhắn văn bản và gửi bản dịch thành một tin nhắn mới.",
 ].join("\n");
 
 const UNSUPPORTED_INPUT_MESSAGE =
@@ -48,15 +48,6 @@ function getKnownBotCommand(ctx) {
   }
 
   return match[1];
-}
-
-function getReplyOptions(messageId) {
-  return {
-    reply_parameters: {
-      message_id: messageId,
-      allow_sending_without_reply: true,
-    },
-  };
 }
 
 async function bestEffortTyping(ctx) {
@@ -124,7 +115,6 @@ export function createTextMessageHandler({
       if (rateLimit.shouldNotify) {
         await ctx.reply(
           `Bạn gửi quá nhanh. Thử lại sau khoảng ${rateLimit.retryAfterSeconds} giây.`,
-          getReplyOptions(ctx.msg.message_id),
         );
       }
       return;
@@ -149,16 +139,13 @@ export function createTextMessageHandler({
             error: toSafeError(error),
           });
         }
-        await ctx.reply(getUserFacingError(error), getReplyOptions(ctx.msg.message_id));
+        await ctx.reply(getUserFacingError(error));
         return;
       }
 
       const chunks = splitTelegramMessage(result.translatedText);
-      for (const [index, chunk] of chunks.entries()) {
-        const replyOptions = index === 0
-          ? getReplyOptions(ctx.msg.message_id)
-          : undefined;
-        await ctx.reply(chunk, replyOptions);
+      for (const chunk of chunks) {
+        await ctx.reply(chunk);
       }
     });
   };
