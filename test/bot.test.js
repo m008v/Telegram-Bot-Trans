@@ -5,6 +5,7 @@ import { AsyncSemaphore } from "../src/async-semaphore.js";
 import { createTextMessageHandler, createTranslationBot } from "../src/bot.js";
 import {
   TranslationCapacityError,
+  UnsupportedInputError,
   UnsupportedLanguageError,
 } from "../src/errors.js";
 
@@ -141,6 +142,25 @@ test("handler im lặng khi provider phát hiện ngôn ngữ không hỗ trợ"
   const translator = {
     async translateBidirectional() {
       throw new UnsupportedLanguageError("en");
+    },
+  };
+  const handler = createTextMessageHandler({
+    translator,
+    logger: { error: (entry) => logEntries.push(entry) },
+  });
+
+  await handler(ctx);
+
+  assert.equal(ctx.replies.length, 0);
+  assert.equal(logEntries.length, 0);
+});
+
+test("handler im lặng khi tin nhắn không có nội dung dịch hợp lệ", async () => {
+  const ctx = createContext("🎉 123");
+  const logEntries = [];
+  const translator = {
+    async translateBidirectional() {
+      throw new UnsupportedInputError();
     },
   };
   const handler = createTextMessageHandler({

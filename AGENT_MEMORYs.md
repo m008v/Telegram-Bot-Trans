@@ -228,3 +228,23 @@
 ### Việc còn lại
 - Cần restart/redeploy tiến trình bot để nạp hành vi mới.
 - `.env.example` và `AGENT_MEMORYs copy.md` là thay đổi/file có sẵn trước task; không stage vào commit này.
+
+## 2026-08-30 — Im lặng với input không có nội dung dịch
+
+### Mục tiêu
+- Loại bỏ thông báo yêu cầu gửi văn bản Trung/Việt khi tin nhắn không có chữ hợp lệ.
+
+### Đã thực hiện
+- Cho `UnsupportedInputError` kết thúc handler mà không gửi tin nhắn và không ghi log lỗi provider.
+- Thêm regression test với nội dung chỉ có emoji và số; cập nhật README về hành vi bỏ qua im lặng.
+
+### Quyết định kỹ thuật
+- Chỉ bỏ phản hồi của input không hỗ trợ; lỗi Google GTX và quá tải vẫn có thông báo để giữ khả năng vận hành và chẩn đoán.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 78/78 test pass trên Node.js `v24.13.0`.
+- `git diff --check` pass.
+
+### Việc còn lại
+- Cần restart/redeploy tiến trình bot để nạp hành vi mới.
+- `.env.example`, `- Copy.gitignore`, `AGENT_MEMORYs copy.md` và `src.zip` là file/thay đổi có sẵn trước task; không stage vào commit này.

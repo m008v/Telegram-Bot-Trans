@@ -18,8 +18,6 @@ const START_MESSAGE = [
   "Bot chỉ xử lý tin nhắn văn bản và gửi bản dịch thành một tin nhắn mới.",
 ].join("\n");
 
-const UNSUPPORTED_INPUT_MESSAGE =
-  "Bot chỉ dịch văn bản tiếng Trung ↔ tiếng Việt. Hãy gửi một câu có nội dung rõ ràng.";
 const PROVIDER_ERROR_MESSAGE =
   "Google Dịch miễn phí đang bận, giới hạn hoặc chặn request. Vui lòng thử lại sau.";
 const CAPACITY_ERROR_MESSAGE =
@@ -146,10 +144,6 @@ async function bestEffortTyping(ctx) {
 }
 
 function getUserFacingError(error) {
-  if (error instanceof UnsupportedInputError) {
-    return UNSUPPORTED_INPUT_MESSAGE;
-  }
-
   if (error instanceof TranslationCapacityError) {
     return CAPACITY_ERROR_MESSAGE;
   }
@@ -214,7 +208,10 @@ export function createTextMessageHandler({
           ? await translationSemaphore.run(translate)
           : await translate();
       } catch (error) {
-        if (error instanceof UnsupportedLanguageError) {
+        if (
+          error instanceof UnsupportedInputError
+          || error instanceof UnsupportedLanguageError
+        ) {
           return;
         }
 
