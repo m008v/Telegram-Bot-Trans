@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   AllowedChatStore,
+  removeAllowedChatIdEnv,
   updateAllowedChatIdsEnv,
 } from "../src/allowed-chat-store.js";
 
@@ -53,7 +54,24 @@ test("updateAllowedChatIdsEnv từ chối cấu hình mơ hồ hoặc chat ID l�
   );
 });
 
-test("AllowedChatStore ghi tuần tự, áp dụng ngay và không để lại file tạm", async (t) => {
+test("removeAllowedChatIdEnv xoá đúng ID và giữ nguyên secret, comment, CRLF", () => {
+  const original = [
+    "TELEGRAM_BOT_TOKEN=secret-khong-duoc-dung",
+    "TELEGRAM_ALLOWED_CHAT_IDS=123,-100456,-100789 # Các nhóm đã duyệt",
+    "TELEGRAM_ADMIN_IDS=42",
+    "",
+  ].join("\r\n");
+
+  assert.equal(removeAllowedChatIdEnv(original, "-100456"), [
+    "TELEGRAM_BOT_TOKEN=secret-khong-duoc-dung",
+    "TELEGRAM_ALLOWED_CHAT_IDS=123,-100789 # Các nhóm đã duyệt",
+    "TELEGRAM_ADMIN_IDS=42",
+    "",
+  ].join("\r\n"));
+  assert.equal(removeAllowedChatIdEnv(original, "-100000"), original);
+});
+
+test("AllowedChatStore ghi tuần tự, áp dụng add/remove ngay và không để file tạm", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "trans-bot-allowlist-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const envPath = join(directory, ".env");
@@ -70,19 +88,25 @@ test("AllowedChatStore ghi tuần tự, áp dụng ngay và không để lại f
     store.add("-100789"),
   ]);
   const duplicate = await store.add("-100456");
+  const [removed, missing] = await Promise.all([
+    store.remove("-100456"),
+    store.remove("-100000"),
+  ]);
 
   assert.deepEqual(first, { added: true });
   assert.deepEqual(second, { added: true });
   assert.deepEqual(duplicate, { added: false });
-  assert.deepEqual([...allowedChatIds], ["123", "-100456", "-100789"]);
+  assert.deepEqual(removed, { removed: true });
+  assert.deepEqual(missing, { removed: false });
+  assert.deepEqual([...allowedChatIds], ["123", "-100789"]);
   assert.match(
     await readFile(envPath, "utf8"),
-    /^TELEGRAM_ALLOWED_CHAT_IDS=123,-100456,-100789$/mu,
+    /^TELEGRAM_ALLOWED_CHAT_IDS=123,-100789$/mu,
   );
   assert.deepEqual(await readdir(directory), [".env"]);
 });
 
-test("AllowedChatStore không mở quyền trong RAM nếu file không phải UTF-8", async (t) => {
+test("AllowedChatStore không đổi quyền trong RAM nếu file không phải UTF-8", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "trans-bot-invalid-env-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const envPath = join(directory, ".env");
@@ -92,5 +116,9 @@ test("AllowedChatStore không mở quyền trong RAM nếu file không phải UT
 
   await assert.rejects(() => store.add("-100456"), /encoded data/u);
   assert.equal(allowedChatIds.size, 0);
+
+  allowedChatIds.add("-100456");
+  await assert.rejects(() => store.remove("-100456"), /encoded data/u);
+  assert.equal(allowedChatIds.has("-100456"), true);
   assert.deepEqual(await readFile(envPath), Buffer.from([0xc3, 0x28]));
 });

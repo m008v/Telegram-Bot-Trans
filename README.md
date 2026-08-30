@@ -54,15 +54,21 @@ npm.cmd run dev
 | `CHINESE_TARGET_LANGUAGE` | Không | `zh-CN` | Chọn `zh-CN` hoặc `zh-TW`. |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Không | Rỗng | Danh sách chat ID, phân cách bằng dấu phẩy. |
 | `TELEGRAM_ALLOW_ALL_CHATS` | Không | `false` | Phải đặt `true` rõ ràng nếu muốn bot public. Không dùng cùng allowlist. |
-| `TELEGRAM_ADMIN_IDS` | Không | Rỗng | Danh sách Telegram user ID được dùng `/addchat`, phân cách bằng dấu phẩy. |
+| `TELEGRAM_ADMIN_IDS` | Không | Rỗng | Danh sách Telegram user ID được quản lý allowlist bằng `/addchat`, `/unchat` và `/list`, phân cách bằng dấu phẩy. |
 | `TELEGRAM_MAX_TRANSLATIONS_PER_MINUTE` | Không | `20` | Số tin dịch tối đa mỗi chat trong một phút. |
 | `TELEGRAM_GLOBAL_MAX_TRANSLATIONS_PER_MINUTE` | Không | `120` | Số tin dịch tối đa toàn bot trong một phút. |
 | `MAX_CONCURRENT_TRANSLATIONS` | Không | `8` | Hard cap số tác vụ dịch chạy song song; hàng đợi chờ tối đa gấp đôi giá trị này. |
 | `TRANSLATION_TIMEOUT_MS` | Không | `15000` | Timeout mỗi request, từ 1.000 đến 60.000 ms. |
 
-Dùng `/id` để lấy chat ID cần đưa vào allowlist. Riêng `/id` và `/addchat` từ admin được phép với rate limit thấp để bootstrap cấu hình. Nếu allowlist rỗng và `TELEGRAM_ALLOW_ALL_CHATS` không phải `true`, bot không dịch tin nhắn nào.
+Dùng `/id` để lấy chat ID cần đưa vào allowlist. Riêng `/id` và các lệnh quản trị allowlist từ admin được phép với rate limit thấp để bootstrap cấu hình. Nếu allowlist rỗng và `TELEGRAM_ALLOW_ALL_CHATS` không phải `true`, bot không dịch tin nhắn nào.
 
-Để admin tự thêm group, điền Telegram user ID của admin vào `TELEGRAM_ADMIN_IDS`, thêm bot vào group rồi chạy `/addchat` ngay trong group đó. Bot chỉ chấp nhận lệnh từ đúng user ID đã cấu hình, cập nhật `.env` theo kiểu atomic và áp dụng allowlist ngay không cần restart. Nếu chưa biết user ID, nhắn riêng `/id` cho bot; trong private chat, Chat ID chính là user ID. Lệnh này không dùng được khi `TELEGRAM_ALLOW_ALL_CHATS=true` vì chế độ public và allowlist loại trừ nhau.
+Để admin quản lý group, điền Telegram user ID của admin vào `TELEGRAM_ADMIN_IDS` rồi dùng:
+
+- `/addchat` trong group để thêm group hiện tại.
+- `/unchat` trong group để xoá group hiện tại.
+- `/list` trong bất kỳ chat nào để xem các chat/group đang được phép theo ID.
+
+Bot chỉ chấp nhận ba lệnh trên từ đúng user ID đã cấu hình, cập nhật `.env` theo kiểu atomic và áp dụng thay đổi ngay không cần restart. Nếu chưa biết user ID, nhắn riêng `/id` cho bot; trong private chat, Chat ID chính là user ID. Các lệnh quản trị allowlist không dùng được khi `TELEGRAM_ALLOW_ALL_CHATS=true` vì chế độ public và allowlist loại trừ nhau.
 
 ## Cách xác định chiều dịch
 

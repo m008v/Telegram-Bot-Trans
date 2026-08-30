@@ -3,6 +3,8 @@ export const BOT_COMMANDS = [
   { command: "help", description: "Xem trợ giúp" },
   { command: "id", description: "Xem chat ID hiện tại" },
   { command: "addchat", description: "Admin: cho phép nhóm hiện tại" },
+  { command: "unchat", description: "Admin: xoá nhóm hiện tại" },
+  { command: "list", description: "Admin: xem các chat được phép" },
 ];
 
 export async function initializeTelegramBot(bot, signal) {

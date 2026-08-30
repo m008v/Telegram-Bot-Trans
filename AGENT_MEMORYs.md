@@ -157,3 +157,29 @@
 - Điền Telegram user ID thật vào `TELEGRAM_ADMIN_IDS` trong `.env` rồi restart bot để nạp quyền admin; không có ID thật nào được commit.
 - Chưa smoke test với Telegram thật vì không sử dụng token trong `.env` ở task này.
 - `AGENT_MEMORYs copy.md` ngoài Git tiếp tục được giữ nguyên và không stage.
+
+## 2026-08-30 — Thu hồi và liệt kê allowlist bằng command
+
+### Mục tiêu
+- Thêm `/unchat` để admin xoá group hiện tại khỏi allowlist và `/list` để xem các chat/group đang được phép dùng bot.
+
+### Đã thực hiện
+- Mở rộng `AllowedChatStore` với thao tác remove dùng chung hàng đợi ghi tuần tự và atomic update `.env`; chỉ cập nhật `Set` trong RAM sau khi persistence thành công.
+- Thêm `/unchat` chỉ dùng trong group/supergroup và `/list` dùng được từ chat chưa nằm trong allowlist; cả hai chỉ chấp nhận Telegram user ID thuộc `TELEGRAM_ADMIN_IDS`.
+- `/list` hiển thị ID dạng plain text, báo rõ allowlist rỗng/public mode và chia danh sách dài dưới giới hạn Telegram.
+- Đăng ký hai command với Telegram, cập nhật README và thêm regression test cho quyền, persistence, lỗi ghi file, danh sách dài và áp dụng thu hồi ngay.
+
+### Quyết định kỹ thuật
+- Giữ danh sách theo ID đang áp dụng trong RAM thay vì gọi `getChat` cho từng entry; lệnh không phụ thuộc network hoặc trạng thái bot còn là thành viên group.
+- Cho phép các lệnh quản trị đi qua middleware ở chat chưa được phép nhưng kiểm tra admin ở cả middleware lẫn handler; người không có quyền bị bỏ qua im lặng.
+- Khi xoá, giữ nguyên secret, comment, newline và các ID khác trong `.env`; cấu hình sai UTF-8 hoặc ghi lỗi không làm RAM lệch khỏi file đã persist.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 76/76 test pass trên Node.js `v24.13.0`.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: 0 vulnerability.
+- `git diff --check`, secret pattern scan và strict UTF-8/mojibake scan trên toàn bộ file thay đổi đều pass.
+
+### Việc còn lại
+- Chưa smoke test Telegram thật để tránh dùng token hoặc thay đổi command menu của bot đang chạy trong lượt kiểm tra local.
+- Cần restart/redeploy bot để nạp command mới; startup tiếp theo sẽ đồng bộ menu qua `setMyCommands`.
+- `.env.example`, `AGENT_MEMORYs copy.md` và `src.zip` là thay đổi/file có sẵn trước task; không stage vào commit này.

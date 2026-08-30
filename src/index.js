@@ -34,6 +34,7 @@ async function main() {
     allowedChatIds: config.allowedChatIds,
     adminUserIds: config.adminUserIds,
     addAllowedChatId: (chatId) => allowedChatStore.add(chatId),
+    removeAllowedChatId: (chatId) => allowedChatStore.remove(chatId),
     allowAllChats: config.allowAllChats,
     perChatTranslationsPerMinute: config.perChatTranslationsPerMinute,
     globalTranslationsPerMinute: config.globalTranslationsPerMinute,

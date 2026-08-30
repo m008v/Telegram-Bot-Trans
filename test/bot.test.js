@@ -337,7 +337,36 @@ test("admin dùng /addchat trong group thì mở quyền ngay cho group đó", a
   assert.equal(sentMessages[1].text, "你好");
 });
 
-test("/addchat bỏ qua người không có quyền kể cả khi group đã được phép", async () => {
+test("admin dùng /unchat trong group thì thu hồi quyền ngay", async () => {
+  const allowedChatIds = new Set(["-100123"]);
+  const removedChatIds = [];
+  let translationCalls = 0;
+  const { handleMessage, sentMessages } = createCommandHarness({
+    allowedChatIds,
+    adminUserIds: new Set(["42"]),
+    async removeAllowedChatId(chatId) {
+      removedChatIds.push(String(chatId));
+      allowedChatIds.delete(String(chatId));
+      return { removed: true };
+    },
+    translator: {
+      async translateBidirectional() {
+        translationCalls += 1;
+        return { translatedText: "unused" };
+      },
+    },
+  });
+
+  await handleMessage({ updateId: 1, text: "/unchat", command: true });
+  await handleMessage({ updateId: 2, text: "Xin chào" });
+
+  assert.deepEqual(removedChatIds, ["-100123"]);
+  assert.equal(allowedChatIds.has("-100123"), false);
+  assert.equal(translationCalls, 0);
+  assert.match(sentMessages[0].text, /Đã xoá nhóm -100123/u);
+});
+
+test("các lệnh quản trị bỏ qua người không có quyền", async () => {
   let persistenceCalls = 0;
   const { handleMessage, sentMessages } = createCommandHarness({
     allowedChatIds: new Set(["-100123"]),
@@ -346,14 +375,20 @@ test("/addchat bỏ qua người không có quyền kể cả khi group đã đ�
       persistenceCalls += 1;
       return { added: true };
     },
+    async removeAllowedChatId() {
+      persistenceCalls += 1;
+      return { removed: true };
+    },
   });
 
-  await handleMessage({
-    updateId: 1,
-    text: "/addchat",
-    userId: 84,
-    command: true,
-  });
+  for (const [index, command] of ["/addchat", "/unchat", "/list"].entries()) {
+    await handleMessage({
+      updateId: index + 1,
+      text: command,
+      userId: 84,
+      command: true,
+    });
+  }
 
   assert.equal(persistenceCalls, 0);
   assert.equal(sentMessages.length, 0);
@@ -385,6 +420,79 @@ test("/addchat chỉ nhận group và từ chối khi bot đang public", async (
   assert.match(publicHarness.sentMessages[0].text, /đang cho phép mọi chat/u);
 });
 
+test("/unchat chỉ nhận group, từ chối chế độ public và báo khi nhóm chưa được phép", async () => {
+  let persistenceCalls = 0;
+  const options = {
+    adminUserIds: new Set(["42"]),
+    async removeAllowedChatId() {
+      persistenceCalls += 1;
+      return { removed: false };
+    },
+  };
+  const privateHarness = createCommandHarness(options);
+  const publicHarness = createCommandHarness({ ...options, allowAllChats: true });
+  const missingHarness = createCommandHarness(options);
+
+  await privateHarness.handleMessage({
+    updateId: 1,
+    text: "/unchat",
+    chatId: 42,
+    chatType: "private",
+    command: true,
+  });
+  await publicHarness.handleMessage({ updateId: 2, text: "/unchat", command: true });
+  await missingHarness.handleMessage({ updateId: 3, text: "/unchat", command: true });
+
+  assert.equal(persistenceCalls, 1);
+  assert.match(privateHarness.sentMessages[0].text, /chỉ dùng trong nhóm/u);
+  assert.match(publicHarness.sentMessages[0].text, /đang cho phép mọi chat/u);
+  assert.match(missingHarness.sentMessages[0].text, /không có trong/u);
+});
+
+test("/list cho admin xem allowlist kể cả từ private chat chưa được phép", async () => {
+  const allowedChatIds = new Set(["-100123", "-100456"]);
+  const { handleMessage, sentMessages } = createCommandHarness({
+    allowedChatIds,
+    adminUserIds: new Set(["42"]),
+  });
+
+  await handleMessage({
+    updateId: 1,
+    text: "/list",
+    chatId: 42,
+    chatType: "private",
+    command: true,
+  });
+
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].text, /được phép dùng bot \(2\)/u);
+  assert.match(sentMessages[0].text, /- -100123/u);
+  assert.match(sentMessages[0].text, /- -100456/u);
+});
+
+test("/list báo allowlist rỗng, chế độ public và chia danh sách dài an toàn", async () => {
+  const emptyHarness = createCommandHarness({ adminUserIds: new Set(["42"]) });
+  const publicHarness = createCommandHarness({
+    adminUserIds: new Set(["42"]),
+    allowAllChats: true,
+  });
+  const longHarness = createCommandHarness({
+    allowedChatIds: new Set(
+      Array.from({ length: 500 }, (_, index) => `-10012345${String(index).padStart(3, "0")}`),
+    ),
+    adminUserIds: new Set(["42"]),
+  });
+
+  await emptyHarness.handleMessage({ updateId: 1, text: "/list", command: true });
+  await publicHarness.handleMessage({ updateId: 2, text: "/list", command: true });
+  await longHarness.handleMessage({ updateId: 3, text: "/list", command: true });
+
+  assert.match(emptyHarness.sentMessages[0].text, /Chưa có chat hoặc nhóm/u);
+  assert.match(publicHarness.sentMessages[0].text, /đang cho phép mọi chat/u);
+  assert.ok(longHarness.sentMessages.length > 1);
+  assert.ok(longHarness.sentMessages.every(({ text }) => Array.from(text).length <= 3_900));
+});
+
 test("/addchat báo lỗi an toàn nếu không ghi được .env", async () => {
   const logEntries = [];
   const { handleMessage, sentMessages } = createCommandHarness({
@@ -399,6 +507,25 @@ test("/addchat báo lỗi an toàn nếu không ghi được .env", async () => 
 
   assert.equal(logEntries[0].event, "allowed_chat_persist_failed");
   assert.match(sentMessages[0].text, /Không thể lưu nhóm/u);
+  assert.doesNotMatch(sentMessages[0].text, /secret-value/u);
+});
+
+test("/unchat báo lỗi an toàn nếu không ghi được .env", async () => {
+  const logEntries = [];
+  const { handleMessage, sentMessages } = createCommandHarness({
+    allowedChatIds: new Set(["-100123"]),
+    adminUserIds: new Set(["42"]),
+    logger: { error: (entry) => logEntries.push(entry) },
+    async removeAllowedChatId() {
+      throw new Error("permission denied: secret-value");
+    },
+  });
+
+  await handleMessage({ updateId: 1, text: "/unchat", command: true });
+
+  assert.equal(logEntries[0].event, "allowed_chat_persist_failed");
+  assert.equal(logEntries[0].operation, "remove");
+  assert.match(sentMessages[0].text, /Không thể xoá nhóm/u);
   assert.doesNotMatch(sentMessages[0].text, /secret-value/u);
 });
 

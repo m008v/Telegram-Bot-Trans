@@ -48,13 +48,13 @@ function parseChatIds(value) {
   return entries.map(normalizeChatId);
 }
 
-export function updateAllowedChatIdsEnv(content, chatIds) {
-  const normalizedChatIds = new Set([...chatIds].map(normalizeChatId));
+function inspectAllowedChatIdsEnv(content) {
   const newline = content.includes("\r\n") ? "\r\n" : "\n";
   const lines = content.split(/\r?\n/u);
   let assignmentIndex = -1;
   let assignmentPrefix = `${ALLOWED_CHAT_IDS_VARIABLE}=`;
   let assignmentComment = "";
+  const persistedChatIds = new Set();
 
   for (const [index, line] of lines.entries()) {
     const match = ALLOWED_CHAT_IDS_ASSIGNMENT.exec(line);
@@ -71,11 +71,29 @@ export function updateAllowedChatIdsEnv(content, chatIds) {
     const parsedValue = splitValueAndComment(match[2]);
     assignmentComment = parsedValue.comment;
     for (const chatId of parseChatIds(parsedValue.value)) {
-      normalizedChatIds.add(chatId);
+      persistedChatIds.add(chatId);
     }
   }
 
-  const assignment = `${assignmentPrefix}${[...normalizedChatIds].join(",")}${assignmentComment}`;
+  return {
+    newline,
+    lines,
+    assignmentIndex,
+    assignmentPrefix,
+    assignmentComment,
+    persistedChatIds,
+  };
+}
+
+function renderAllowedChatIdsEnv(content, inspection, chatIds) {
+  const {
+    newline,
+    lines,
+    assignmentIndex,
+    assignmentPrefix,
+    assignmentComment,
+  } = inspection;
+  const assignment = `${assignmentPrefix}${[...chatIds].join(",")}${assignmentComment}`;
   if (assignmentIndex === -1) {
     const separator = content.length === 0 || content.endsWith("\n") ? "" : newline;
     return `${content}${separator}${assignment}${newline}`;
@@ -83,6 +101,26 @@ export function updateAllowedChatIdsEnv(content, chatIds) {
 
   lines[assignmentIndex] = assignment;
   return lines.join(newline);
+}
+
+export function updateAllowedChatIdsEnv(content, chatIds) {
+  const inspection = inspectAllowedChatIdsEnv(content);
+  const normalizedChatIds = new Set([...chatIds].map(normalizeChatId));
+  for (const chatId of inspection.persistedChatIds) {
+    normalizedChatIds.add(chatId);
+  }
+
+  return renderAllowedChatIdsEnv(content, inspection, normalizedChatIds);
+}
+
+export function removeAllowedChatIdEnv(content, chatId) {
+  const normalizedChatId = normalizeChatId(chatId);
+  const inspection = inspectAllowedChatIdsEnv(content);
+  if (!inspection.persistedChatIds.delete(normalizedChatId)) {
+    return content;
+  }
+
+  return renderAllowedChatIdsEnv(content, inspection, inspection.persistedChatIds);
 }
 
 async function readUtf8File(filePath) {
@@ -156,7 +194,15 @@ export class AllowedChatStore {
   }
 
   add(chatId) {
-    const update = this.#pendingUpdate.then(() => this.#add(chatId));
+    return this.#enqueue(() => this.#add(chatId));
+  }
+
+  remove(chatId) {
+    return this.#enqueue(() => this.#remove(chatId));
+  }
+
+  #enqueue(operation) {
+    const update = this.#pendingUpdate.then(operation);
     this.#pendingUpdate = update.then(
       () => undefined,
       () => undefined,
@@ -180,5 +226,20 @@ export class AllowedChatStore {
 
     this.allowedChatIds.add(normalizedChatId);
     return { added: !wasAllowed };
+  }
+
+  async #remove(chatId) {
+    const normalizedChatId = normalizeChatId(chatId);
+    const wasAllowed = this.allowedChatIds.has(normalizedChatId);
+    const currentContent = await readUtf8File(this.filePath);
+    const updatedContent = removeAllowedChatIdEnv(currentContent, normalizedChatId);
+
+    if (updatedContent !== currentContent) {
+      const mode = await getFileMode(this.filePath);
+      await writeFileAtomically(this.filePath, updatedContent, mode);
+    }
+
+    this.allowedChatIds.delete(normalizedChatId);
+    return { removed: wasAllowed || updatedContent !== currentContent };
   }
 }

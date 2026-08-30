@@ -26,7 +26,11 @@ const PROVIDER_ERROR_MESSAGE =
   "Google Dịch miễn phí đang bận, giới hạn hoặc chặn request. Vui lòng thử lại sau.";
 const CAPACITY_ERROR_MESSAGE =
   "Bot đang xử lý nhiều tin nhắn. Vui lòng thử lại sau ít phút.";
-const BOT_COMMAND_PATTERN = /^\/(start|help|id|addchat)(?:@([A-Za-z0-9_]+))?(?:\s|$)/u;
+const BOT_COMMAND_PATTERN =
+  /^\/(start|help|id|addchat|unchat|list)(?:@([A-Za-z0-9_]+))?(?:\s|$)/u;
+const ADMIN_COMMANDS = new Set(["addchat", "unchat", "list"]);
+const PUBLIC_MODE_ALLOWLIST_MESSAGE =
+  "Bot đang cho phép mọi chat; hãy tắt TELEGRAM_ALLOW_ALL_CHATS trước khi dùng allowlist.";
 
 function isChatAllowed(chatId, allowedChatIds, allowAllChats) {
   return allowAllChats || allowedChatIds.has(String(chatId));
@@ -38,6 +42,17 @@ function isAdminUser(userId, adminUserIds) {
 
 function isGroupChat(chat) {
   return chat?.type === "group" || chat?.type === "supergroup";
+}
+
+function formatAllowedChatList(allowedChatIds) {
+  if (allowedChatIds.size === 0) {
+    return "Chưa có chat hoặc nhóm nào trong TELEGRAM_ALLOWED_CHAT_IDS.";
+  }
+
+  return [
+    `Các chat/nhóm đang được phép dùng bot (${allowedChatIds.size}):`,
+    ...[...allowedChatIds].map((chatId) => `- ${chatId}`),
+  ].join("\n");
 }
 
 function getKnownBotCommand(ctx) {
@@ -165,6 +180,7 @@ export function createTranslationBot({
   allowedChatIds = new Set(),
   adminUserIds = new Set(),
   addAllowedChatId,
+  removeAllowedChatId,
   allowAllChats = false,
   perChatTranslationsPerMinute = 20,
   globalTranslationsPerMinute = 120,
@@ -197,9 +213,10 @@ export function createTranslationBot({
     const chatAllowed = isChatAllowed(ctx.chat.id, allowedChatIds, allowAllChats);
     const knownCommand = getKnownBotCommand(ctx);
     if (knownCommand) {
-      const adminCommandAllowed = knownCommand === "addchat"
+      const isAdminCommand = ADMIN_COMMANDS.has(knownCommand);
+      const adminCommandAllowed = isAdminCommand
         && isAdminUser(ctx.from?.id, adminUserIds);
-      if (knownCommand === "addchat" && !adminCommandAllowed) {
+      if (isAdminCommand && !adminCommandAllowed) {
         return;
       }
 
@@ -235,9 +252,7 @@ export function createTranslationBot({
     }
 
     if (allowAllChats) {
-      await ctx.reply(
-        "Bot đang cho phép mọi chat; hãy tắt TELEGRAM_ALLOW_ALL_CHATS trước khi dùng allowlist.",
-      );
+      await ctx.reply(PUBLIC_MODE_ALLOWLIST_MESSAGE);
       return;
     }
 
@@ -268,6 +283,66 @@ export function createTranslationBot({
     await ctx.reply(result.added
       ? `Đã thêm nhóm ${ctx.chat.id} vào TELEGRAM_ALLOWED_CHAT_IDS.`
       : `Nhóm ${ctx.chat.id} đã có trong TELEGRAM_ALLOWED_CHAT_IDS.`);
+  });
+  bot.command("unchat", async (ctx) => {
+    if (!isAdminUser(ctx.from?.id, adminUserIds)) {
+      return;
+    }
+
+    if (!isGroupChat(ctx.chat)) {
+      await ctx.reply("Lệnh /unchat chỉ dùng trong nhóm hoặc siêu nhóm Telegram.");
+      return;
+    }
+
+    if (allowAllChats) {
+      await ctx.reply(PUBLIC_MODE_ALLOWLIST_MESSAGE);
+      return;
+    }
+
+    if (typeof removeAllowedChatId !== "function") {
+      logger.error({
+        event: "allowed_chat_store_missing",
+        operation: "remove",
+        chatId: String(ctx.chat.id),
+        userId: String(ctx.from.id),
+      });
+      await ctx.reply("Bot chưa được cấu hình nơi lưu allowlist. Không thể xoá nhóm này.");
+      return;
+    }
+
+    let result;
+    try {
+      result = await removeAllowedChatId(ctx.chat.id);
+    } catch (error) {
+      logger.error({
+        event: "allowed_chat_persist_failed",
+        operation: "remove",
+        chatId: String(ctx.chat.id),
+        userId: String(ctx.from.id),
+        error: toSafeError(error),
+      });
+      await ctx.reply("Không thể xoá nhóm khỏi allowlist. Vui lòng kiểm tra log và thử lại.");
+      return;
+    }
+
+    await ctx.reply(result.removed
+      ? `Đã xoá nhóm ${ctx.chat.id} khỏi TELEGRAM_ALLOWED_CHAT_IDS.`
+      : `Nhóm ${ctx.chat.id} không có trong TELEGRAM_ALLOWED_CHAT_IDS.`);
+  });
+  bot.command("list", async (ctx) => {
+    if (!isAdminUser(ctx.from?.id, adminUserIds)) {
+      return;
+    }
+
+    if (allowAllChats) {
+      await ctx.reply(PUBLIC_MODE_ALLOWLIST_MESSAGE);
+      return;
+    }
+
+    const chunks = splitTelegramMessage(formatAllowedChatList(allowedChatIds));
+    for (const chunk of chunks) {
+      await ctx.reply(chunk);
+    }
   });
   bot.on("message:text", createTextMessageHandler({
     translator,
