@@ -9,10 +9,10 @@ import { run } from "@grammyjs/runner";
 import { AllowedChatStore } from "./allowed-chat-store.js";
 import { createTranslationBot } from "./bot.js";
 import { loadConfig } from "./config.js";
-import { GtxTranslateService } from "./gtx-translate-service.js";
 import { drainRunnerAndCloseTranslator } from "./runner-lifecycle.js";
 import { toSafeError } from "./safe-error.js";
 import { initializeTelegramBot } from "./telegram-startup.js";
+import { YandexTranslateService } from "./yandex-translate-service.js";
 
 const STARTUP_TIMEOUT_MS = 45_000;
 const FORCE_SHUTDOWN_TIMEOUT_MS = 130_000;
@@ -20,7 +20,9 @@ const RUNNER_CAPACITY = 100;
 
 async function main() {
   const config = loadConfig();
-  const translator = new GtxTranslateService({
+  const translator = new YandexTranslateService({
+    apiKey: config.yandexTranslateApiKey,
+    folderId: config.yandexTranslateFolderId,
     chineseTargetLanguage: config.chineseTargetLanguage,
     timeoutMs: config.translationTimeoutMs,
   });
@@ -136,7 +138,10 @@ async function main() {
   if (operationError && cleanupError) {
     console.error({
       event: "bot_cleanup_failed",
-      error: toSafeError(cleanupError, [config.telegramToken]),
+      error: toSafeError(cleanupError, [
+        config.telegramToken,
+        config.yandexTranslateApiKey,
+      ]),
     });
   }
 
@@ -152,7 +157,10 @@ async function main() {
 main().catch((error) => {
   console.error({
     event: "bot_fatal_error",
-    error: toSafeError(error, [process.env.TELEGRAM_BOT_TOKEN]),
+    error: toSafeError(error, [
+      process.env.TELEGRAM_BOT_TOKEN,
+      process.env.YANDEX_TRANSLATE_API_KEY,
+    ]),
   });
   process.exitCode = 1;
 });

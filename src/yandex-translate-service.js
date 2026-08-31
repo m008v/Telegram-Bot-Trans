@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { URLSearchParams } from "node:url";
 import { TextDecoder } from "node:util";
 
 import {
@@ -13,10 +12,11 @@ import {
   inferSourceLanguageFamily,
 } from "./language.js";
 
-export const GTX_TRANSLATE_ENDPOINT =
-  "https://translate.googleapis.com/translate_a/single";
+export const YANDEX_TRANSLATE_ENDPOINT =
+  "https://translate.api.cloud.yandex.net/translate/v2/translate";
 
-const SUPPORTED_CHINESE_TARGETS = new Set(["zh-CN", "zh-TW"]);
+const YANDEX_CHINESE_LANGUAGE = "zh";
+const MAX_REQUEST_CHARACTERS = 10_000;
 const MAX_RESPONSE_LENGTH = 256_000;
 
 function createProviderError(message, providerCode, cause) {
@@ -25,6 +25,29 @@ function createProviderError(message, providerCode, cause) {
 
 function isTimeoutError(error) {
   return error?.name === "TimeoutError" || error?.name === "AbortError";
+}
+
+function assertValidApiKey(apiKey) {
+  if (typeof apiKey !== "string" || apiKey.trim().length === 0) {
+    throw new TypeError("YANDEX_TRANSLATE_API_KEY là bắt buộc.");
+  }
+
+  if (/\s/u.test(apiKey)) {
+    throw new TypeError("YANDEX_TRANSLATE_API_KEY không được chứa khoảng trắng.");
+  }
+}
+
+function assertValidFolderId(folderId) {
+  if (folderId === undefined) {
+    return;
+  }
+
+  if (
+    typeof folderId !== "string"
+    || !/^[A-Za-z0-9_-]{1,50}$/u.test(folderId)
+  ) {
+    throw new TypeError("YANDEX_TRANSLATE_FOLDER_ID không đúng định dạng.");
+  }
 }
 
 async function cancelResponseBody(response) {
@@ -47,7 +70,7 @@ async function readResponseText(response) {
       const responseText = await response.text();
       if (Buffer.byteLength(responseText, "utf8") > MAX_RESPONSE_LENGTH) {
         throw createProviderError(
-          "Google GTX trả về response quá lớn.",
+          "Yandex Translate trả về response quá lớn.",
           "INVALID_RESPONSE",
         );
       }
@@ -60,8 +83,8 @@ async function readResponseText(response) {
 
       throw createProviderError(
         isTimeoutError(error)
-          ? "Google GTX phản hồi quá thời gian cho phép."
-          : "Không thể đọc response từ Google GTX.",
+          ? "Yandex Translate phản hồi quá thời gian cho phép."
+          : "Không thể đọc response từ Yandex Translate.",
         isTimeoutError(error) ? "TIMEOUT" : "INVALID_RESPONSE",
         error,
       );
@@ -82,7 +105,7 @@ async function readResponseText(response) {
 
       if (!(value instanceof Uint8Array)) {
         throw createProviderError(
-          "Google GTX trả về stream không hợp lệ.",
+          "Yandex Translate trả về stream không hợp lệ.",
           "INVALID_RESPONSE",
         );
       }
@@ -90,7 +113,7 @@ async function readResponseText(response) {
       receivedBytes += value.byteLength;
       if (receivedBytes > MAX_RESPONSE_LENGTH) {
         throw createProviderError(
-          "Google GTX trả về response quá lớn.",
+          "Yandex Translate trả về response quá lớn.",
           "INVALID_RESPONSE",
         );
       }
@@ -108,8 +131,8 @@ async function readResponseText(response) {
 
     throw createProviderError(
       isTimeoutError(error)
-        ? "Google GTX phản hồi quá thời gian cho phép."
-        : "Không thể đọc response từ Google GTX.",
+        ? "Yandex Translate phản hồi quá thời gian cho phép."
+        : "Không thể đọc response từ Yandex Translate.",
       isTimeoutError(error) ? "TIMEOUT" : "INVALID_RESPONSE",
       error,
     );
@@ -125,61 +148,75 @@ async function readResponseText(response) {
   }
 }
 
-function parseGtxPayload(payload, { requireDetectedLanguage = false } = {}) {
-  if (!Array.isArray(payload) || !Array.isArray(payload[0])) {
+function parseYandexPayload(payload, { requireDetectedLanguage = false } = {}) {
+  if (
+    typeof payload !== "object"
+    || payload === null
+    || !Array.isArray(payload.translations)
+    || payload.translations.length !== 1
+  ) {
     throw createProviderError(
-      "Google GTX trả về dữ liệu không hợp lệ.",
+      "Yandex Translate trả về dữ liệu không hợp lệ.",
       "INVALID_RESPONSE",
     );
   }
 
-  const translatedParts = payload[0].map((segment) => {
-    if (!Array.isArray(segment) || typeof segment[0] !== "string") {
-      throw createProviderError(
-        "Google GTX trả về segment không hợp lệ.",
-        "INVALID_RESPONSE",
-      );
-    }
-
-    return segment[0];
-  });
-  const translatedText = translatedParts.join("");
-
-  if (translatedText.trim().length === 0) {
+  const [translation] = payload.translations;
+  if (
+    typeof translation !== "object"
+    || translation === null
+    || typeof translation.text !== "string"
+    || translation.text.trim().length === 0
+  ) {
     throw createProviderError(
-      "Google GTX trả về bản dịch rỗng.",
+      "Yandex Translate trả về bản dịch không hợp lệ.",
       "INVALID_RESPONSE",
     );
   }
 
-  const detectedLanguageCode = typeof payload[2] === "string"
-    ? payload[2].trim()
-    : undefined;
+  const detectedLanguageCode =
+    typeof translation.detectedLanguageCode === "string"
+      ? translation.detectedLanguageCode.trim()
+      : undefined;
 
   if (requireDetectedLanguage && !detectedLanguageCode) {
     throw createProviderError(
-      "Google GTX không trả về ngôn ngữ nguồn.",
+      "Yandex Translate không trả về ngôn ngữ nguồn.",
       "INVALID_RESPONSE",
     );
   }
 
-  return { translatedText, detectedLanguageCode };
+  return {
+    translatedText: translation.text,
+    detectedLanguageCode,
+  };
 }
 
-export class GtxTranslateService {
+export class YandexTranslateService {
   constructor({
-    chineseTargetLanguage = "zh-CN",
+    apiKey,
+    folderId,
+    chineseTargetLanguage = YANDEX_CHINESE_LANGUAGE,
     timeoutMs = 15_000,
     fetchImpl = globalThis.fetch,
   } = {}) {
-    if (!SUPPORTED_CHINESE_TARGETS.has(chineseTargetLanguage)) {
-      throw new RangeError("Chinese target chỉ nhận zh-CN hoặc zh-TW.");
+    assertValidApiKey(apiKey);
+    assertValidFolderId(folderId);
+
+    if (chineseTargetLanguage !== YANDEX_CHINESE_LANGUAGE) {
+      throw new RangeError("Yandex Translate chỉ hỗ trợ target tiếng Trung là zh.");
+    }
+
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 60_000) {
+      throw new RangeError("timeoutMs phải là số nguyên từ 1000 đến 60000.");
     }
 
     if (typeof fetchImpl !== "function") {
       throw new TypeError("Môi trường chạy không hỗ trợ fetch.");
     }
 
+    this.apiKey = apiKey;
+    this.folderId = folderId;
     this.chineseTargetLanguage = chineseTargetLanguage;
     this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
@@ -189,16 +226,14 @@ export class GtxTranslateService {
     const sourceFamily = inferSourceLanguageFamily(text);
     const shouldAutoDetect = sourceFamily === "vi"
       && !hasLikelyVietnameseEvidence(text);
-    const requestSourceLanguageCode = sourceFamily === "zh"
-      ? "zh"
-      : shouldAutoDetect ? "auto" : "vi";
+    const sourceLanguageCode = shouldAutoDetect ? undefined : sourceFamily;
     const targetLanguageCode = getTargetLanguageForSource(
       sourceFamily,
       this.chineseTargetLanguage,
     );
     const translation = await this.translateText(
       text,
-      requestSourceLanguageCode,
+      sourceLanguageCode,
       targetLanguageCode,
       { requireDetectedLanguage: shouldAutoDetect },
     );
@@ -212,7 +247,7 @@ export class GtxTranslateService {
 
     return {
       translatedText: translation.translatedText,
-      sourceLanguageCode: sourceFamily === "zh" ? "zh" : "vi",
+      sourceLanguageCode: sourceFamily,
       targetLanguageCode,
     };
   }
@@ -223,23 +258,38 @@ export class GtxTranslateService {
     targetLanguageCode,
     { requireDetectedLanguage = false } = {},
   ) {
-    const body = new URLSearchParams({
-      client: "gtx",
-      sl: sourceLanguageCode,
-      tl: targetLanguageCode,
-      dt: "t",
-      q: text,
-    });
-    let response;
+    if (Array.from(text).length > MAX_REQUEST_CHARACTERS) {
+      throw createProviderError(
+        "Nội dung vượt giới hạn 10000 ký tự của Yandex Translate.",
+        "INVALID_REQUEST",
+      );
+    }
 
+    const requestBody = {
+      targetLanguageCode,
+      format: "PLAIN_TEXT",
+      texts: [text],
+    };
+
+    if (sourceLanguageCode) {
+      requestBody.sourceLanguageCode = sourceLanguageCode;
+    }
+
+    if (this.folderId) {
+      requestBody.folderId = this.folderId;
+    }
+
+    let response;
     try {
-      response = await this.fetchImpl(GTX_TRANSLATE_ENDPOINT, {
+      response = await this.fetchImpl(YANDEX_TRANSLATE_ENDPOINT, {
         method: "POST",
         headers: {
           Accept: "application/json",
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          Authorization: `Api-Key ${this.apiKey}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "x-data-logging-enabled": "false",
         },
-        body,
+        body: JSON.stringify(requestBody),
         redirect: "error",
         signal: AbortSignal.timeout(this.timeoutMs),
       });
@@ -247,8 +297,8 @@ export class GtxTranslateService {
       const timedOut = isTimeoutError(error);
       throw createProviderError(
         timedOut
-          ? "Google GTX phản hồi quá thời gian cho phép."
-          : "Không thể kết nối tới Google GTX.",
+          ? "Yandex Translate phản hồi quá thời gian cho phép."
+          : "Không thể kết nối tới Yandex Translate.",
         timedOut ? "TIMEOUT" : "NETWORK",
         error,
       );
@@ -256,7 +306,7 @@ export class GtxTranslateService {
 
     if (!response || typeof response.ok !== "boolean") {
       throw createProviderError(
-        "Google GTX trả về HTTP response không hợp lệ.",
+        "Yandex Translate trả về HTTP response không hợp lệ.",
         "INVALID_RESPONSE",
       );
     }
@@ -264,7 +314,7 @@ export class GtxTranslateService {
     if (!response.ok) {
       await cancelResponseBody(response);
       throw createProviderError(
-        "Google GTX từ chối hoặc không xử lý được request.",
+        "Yandex Translate từ chối hoặc không xử lý được request.",
         `HTTP_${response.status}`,
       );
     }
@@ -273,7 +323,7 @@ export class GtxTranslateService {
     if (contentType && !contentType.toLowerCase().includes("application/json")) {
       await cancelResponseBody(response);
       throw createProviderError(
-        "Google GTX trả về content type không hợp lệ.",
+        "Yandex Translate trả về content type không hợp lệ.",
         "INVALID_RESPONSE",
       );
     }
@@ -282,7 +332,7 @@ export class GtxTranslateService {
     if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_LENGTH) {
       await cancelResponseBody(response);
       throw createProviderError(
-        "Google GTX trả về response quá lớn.",
+        "Yandex Translate trả về response quá lớn.",
         "INVALID_RESPONSE",
       );
     }
@@ -294,13 +344,13 @@ export class GtxTranslateService {
       payload = JSON.parse(responseText);
     } catch (error) {
       throw createProviderError(
-        "Google GTX trả về JSON không hợp lệ.",
+        "Yandex Translate trả về JSON không hợp lệ.",
         "INVALID_RESPONSE",
         error,
       );
     }
 
-    return parseGtxPayload(payload, { requireDetectedLanguage });
+    return parseYandexPayload(payload, { requireDetectedLanguage });
   }
 
   async close() {

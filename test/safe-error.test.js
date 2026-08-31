@@ -12,3 +12,13 @@ test("ẩn Telegram token khỏi log", () => {
   assert.equal(safeError.message.includes(token), false);
   assert.match(safeError.message, /REDACTED/u);
 });
+
+test("ẩn API key Yandex khi caller truyền secret cần che", () => {
+  const apiKey = "AQVN_test_api_key_without_secret_value";
+  const error = new Error(`Yandex từ chối API key ${apiKey}`);
+
+  const safeError = toSafeError(error, [apiKey]);
+
+  assert.equal(safeError.message.includes(apiKey), false);
+  assert.match(safeError.message, /REDACTED/u);
+});

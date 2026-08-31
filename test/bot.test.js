@@ -5,6 +5,7 @@ import { AsyncSemaphore } from "../src/async-semaphore.js";
 import { createTextMessageHandler, createTranslationBot } from "../src/bot.js";
 import {
   TranslationCapacityError,
+  TranslationProviderError,
   UnsupportedInputError,
   UnsupportedLanguageError,
 } from "../src/errors.js";
@@ -172,6 +173,30 @@ test("handler im lặng khi tin nhắn không có nội dung dịch hợp lệ",
 
   assert.equal(ctx.replies.length, 0);
   assert.equal(logEntries.length, 0);
+});
+
+test("handler báo lỗi provider trung tính và không nhắc Google GTX", async () => {
+  const ctx = createContext("Xin chào");
+  const logEntries = [];
+  const translator = {
+    async translateBidirectional() {
+      throw new TranslationProviderError("Yandex từ chối request.", {
+        providerCode: "HTTP_429",
+      });
+    },
+  };
+  const handler = createTextMessageHandler({
+    translator,
+    logger: { error: (entry) => logEntries.push(entry) },
+  });
+
+  await handler(ctx);
+
+  assert.match(ctx.replies[0].text, /hết quota/u);
+  assert.doesNotMatch(ctx.replies[0].text, /Google|GTX/u);
+  assert.equal(ctx.replies[0].options, undefined);
+  assert.equal(logEntries[0].event, "translation_failed");
+  assert.equal(logEntries[0].error.code, "TRANSLATION_PROVIDER_ERROR");
 });
 
 test("handler báo bận nhưng không log như lỗi provider khi semaphore đầy", async () => {

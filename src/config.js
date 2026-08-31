@@ -1,4 +1,4 @@
-const SUPPORTED_CHINESE_TARGETS = new Set(["zh-CN", "zh-TW"]);
+const YANDEX_CHINESE_LANGUAGE = "zh";
 
 function readRequired(env, name) {
   const value = env[name]?.trim();
@@ -26,6 +26,28 @@ function parseTimeout(value) {
   }
 
   return timeoutMs;
+}
+
+function parseYandexApiKey(value) {
+  if (/\s/u.test(value)) {
+    throw new Error("YANDEX_TRANSLATE_API_KEY không được chứa khoảng trắng.");
+  }
+
+  return value;
+}
+
+function parseOptionalFolderId(value = "") {
+  const folderId = value.trim();
+
+  if (!folderId) {
+    return undefined;
+  }
+
+  if (!/^[A-Za-z0-9_-]{1,50}$/u.test(folderId)) {
+    throw new Error("YANDEX_TRANSLATE_FOLDER_ID không đúng định dạng.");
+  }
+
+  return folderId;
 }
 
 function parseIntegerInRange(value, name, minimum, maximum) {
@@ -80,10 +102,18 @@ function parseAdminUserIds(value = "") {
 
 export function loadConfig(env = process.env) {
   const telegramToken = parseTelegramToken(readRequired(env, "TELEGRAM_BOT_TOKEN"));
-  const chineseTargetLanguage = env.CHINESE_TARGET_LANGUAGE?.trim() || "zh-CN";
+  const yandexTranslateApiKey = parseYandexApiKey(
+    readRequired(env, "YANDEX_TRANSLATE_API_KEY"),
+  );
+  const configuredChineseTarget = env.CHINESE_TARGET_LANGUAGE?.trim() || "zh";
+  const chineseTargetLanguage = configuredChineseTarget === "zh-CN"
+    ? YANDEX_CHINESE_LANGUAGE
+    : configuredChineseTarget;
 
-  if (!SUPPORTED_CHINESE_TARGETS.has(chineseTargetLanguage)) {
-    throw new Error("CHINESE_TARGET_LANGUAGE chỉ nhận zh-CN hoặc zh-TW.");
+  if (chineseTargetLanguage !== YANDEX_CHINESE_LANGUAGE) {
+    throw new Error(
+      "CHINESE_TARGET_LANGUAGE chỉ nhận zh; zh-CN được hỗ trợ như alias cũ.",
+    );
   }
 
   const allowedChatIds = parseAllowedChatIds(env.TELEGRAM_ALLOWED_CHAT_IDS);
@@ -120,6 +150,10 @@ export function loadConfig(env = process.env) {
 
   return {
     telegramToken,
+    yandexTranslateApiKey,
+    yandexTranslateFolderId: parseOptionalFolderId(
+      env.YANDEX_TRANSLATE_FOLDER_ID,
+    ),
     chineseTargetLanguage,
     allowedChatIds,
     adminUserIds,

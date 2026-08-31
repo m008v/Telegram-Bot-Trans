@@ -2,7 +2,7 @@
   "name": "trans-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Telegram bot dịch hai chiều tiếng Trung và tiếng Việt qua Google GTX.",
+  "description": "Telegram bot dịch hai chiều tiếng Trung và tiếng Việt qua Yandex Translate.",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"

@@ -2,20 +2,21 @@
 
 Bot Telegram dịch hai chiều theo thời gian thực:
 
-- Tin nhắn tiếng Việt → tiếng Trung (`zh-CN` mặc định, có thể đổi sang `zh-TW`).
+- Tin nhắn tiếng Việt → tiếng Trung (`zh`).
 - Tin nhắn tiếng Trung → tiếng Việt.
-- Gọi endpoint Google GTX bằng `POST`, không cần Google Cloud project, API key hay billing.
+- Gọi Yandex Translate API v2 chính thức bằng `POST` JSON.
 - Giữ thứ tự tin nhắn trong từng chat nhưng vẫn xử lý song song giữa các chat.
 - Tự chia bản dịch dài để không vượt giới hạn tin nhắn Telegram.
 - Mặc định fail-closed, có allowlist, rate limit và giới hạn số tác vụ dịch chạy đồng thời.
 
-> [!WARNING]
-> Google GTX là endpoint nội bộ, không có tài liệu công khai, SLA hoặc quota cam kết. Google có thể đổi giao thức, giới hạn hay chặn request bất kỳ lúc nào; `robots.txt` của dịch vụ cũng chặn đường dẫn `/translate_a/`. Dùng Cloud Translation API chính thức nếu cần vận hành production ổn định hoặc tuân thủ điều khoản chặt chẽ.
+> [!IMPORTANT]
+> Yandex Translate cần billing account ở trạng thái `ACTIVE` hoặc `TRIAL_ACTIVE`, service account có role `ai.translate.user` và API key có scope `yc.ai.translate.execute`. Quota mặc định hiện tại là 20 request/giây và 1 triệu ký tự/giờ; đây là quota kỹ thuật, không đồng nghĩa miễn phí.
 
 ## Yêu cầu
 
 - Node.js `>= 22.13.0`.
 - Một bot tạo bởi [@BotFather](https://t.me/BotFather).
+- Một service account Yandex với API key dành cho Translate.
 
 ## Cài đặt
 
@@ -28,7 +29,9 @@ Sửa `.env`:
 
 ```dotenv
 TELEGRAM_BOT_TOKEN=123456789:token_thật_từ_BotFather
-CHINESE_TARGET_LANGUAGE=zh-CN
+YANDEX_TRANSLATE_API_KEY=api_key_thật_từ_Yandex
+YANDEX_TRANSLATE_FOLDER_ID=
+CHINESE_TARGET_LANGUAGE=zh
 TELEGRAM_ALLOWED_CHAT_IDS=123456789,-1001234567890
 TELEGRAM_ALLOW_ALL_CHATS=false
 TELEGRAM_ADMIN_IDS=123456789
@@ -51,7 +54,9 @@ npm.cmd run dev
 | Biến | Bắt buộc | Mặc định | Ý nghĩa |
 |---|---:|---|---|
 | `TELEGRAM_BOT_TOKEN` | Có | — | Token bí mật từ BotFather. |
-| `CHINESE_TARGET_LANGUAGE` | Không | `zh-CN` | Chọn `zh-CN` hoặc `zh-TW`. |
+| `YANDEX_TRANSLATE_API_KEY` | Có | — | API key của service account Yandex; không commit hoặc ghi vào log. |
+| `YANDEX_TRANSLATE_FOLDER_ID` | Không | Rỗng | Folder ID nếu kiểu xác thực/tài khoản yêu cầu; bỏ trống với service account không cần trường này. |
+| `CHINESE_TARGET_LANGUAGE` | Không | `zh` | Yandex chỉ công bố mã `zh`; `zh-CN` được nhận như alias tương thích cấu hình cũ. `zh-TW` không được hỗ trợ. |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Không | Rỗng | Danh sách chat ID, phân cách bằng dấu phẩy. |
 | `TELEGRAM_ALLOW_ALL_CHATS` | Không | `false` | Phải đặt `true` rõ ràng nếu muốn bot public. Không dùng cùng allowlist. |
 | `TELEGRAM_ADMIN_IDS` | Không | Rỗng | Danh sách Telegram user ID được quản lý allowlist bằng `/addchat`, `/unchat` và `/list`, phân cách bằng dấu phẩy. |
@@ -72,15 +77,15 @@ Bot chỉ chấp nhận ba lệnh trên từ đúng user ID đã cấu hình, c�
 
 ## Cách xác định chiều dịch
 
-Bot kết hợp kiểm tra Unicode cục bộ với `sl=auto`, vì để Google tự đoán mọi trường hợp thường nhận nhầm tiếng Việt không dấu và tiếng Trung phồn thể:
+Bot kết hợp kiểm tra Unicode cục bộ với auto-detect của Yandex để không giao toàn bộ quyết định ngôn ngữ cho provider:
 
-- Chữ Hán chiếm ưu thế: gửi `sl=zh` và dịch sang tiếng Việt.
-- Chữ Latin có dấu hiệu tiếng Việt rõ ràng: gửi `sl=vi` và dịch sang `CHINESE_TARGET_LANGUAGE`.
-- Câu Latin còn mơ hồ: gửi `sl=auto`; chỉ chấp nhận bản dịch khi Google báo ngôn ngữ nguồn là `vi`.
+- Chữ Hán chiếm ưu thế: gửi source `zh` và dịch sang tiếng Việt.
+- Chữ Latin có dấu hiệu tiếng Việt rõ ràng: gửi source `vi` và dịch sang `zh`.
+- Câu Latin còn mơ hồ: bỏ source để Yandex tự nhận diện; chỉ chấp nhận bản dịch khi response báo nguồn là `vi`.
 - Nếu số chữ Hán và Latin bằng nhau nhưng có chữ Hán: ưu tiên tiếng Trung.
-- Tin chỉ có emoji, số, dấu câu hoặc chứa chữ Nhật/Hàn bị từ chối trước khi gọi Google.
+- Tin chỉ có emoji, số, dấu câu hoặc chứa chữ Nhật/Hàn bị từ chối trước khi gọi Yandex.
 
-Đây vẫn là heuristic vì endpoint miễn phí không cung cấp cam kết nhận diện. Tin quá ngắn, tiếng Việt không dấu hiếm gặp hoặc câu trộn nhiều ngôn ngữ có thể bị từ chối để tránh dịch nhầm tiếng Anh sang Trung.
+Đây vẫn là heuristic. Tin quá ngắn, tiếng Việt không dấu hiếm gặp hoặc câu trộn nhiều ngôn ngữ có thể bị từ chối để tránh dịch nhầm tiếng Anh sang Trung.
 
 ## Dùng trong group
 
@@ -98,16 +103,17 @@ Bot bỏ qua tin nhắn của bot khác, command, nội dung không có chữ h�
 npm.cmd run check
 ```
 
-Lệnh này chạy ESLint và toàn bộ unit test bằng test runner tích hợp của Node.js. Unit test dùng HTTP giả lập, không spam endpoint GTX.
+Lệnh này chạy ESLint và toàn bộ unit test bằng test runner tích hợp của Node.js. Unit test dùng HTTP giả lập, không gọi hoặc đốt quota Yandex.
 
 ## Lưu ý vận hành và bảo mật
 
-- Nội dung dịch được đặt trong body form của request `POST`, không xuất hiện trên query string; tuy vậy nội dung vẫn được gửi tới Google.
+- Nội dung dịch được đặt trong body JSON của request `POST`, không xuất hiện trên query string; nội dung vẫn được gửi tới Yandex để xử lý.
 - URL dịch được hard-code, không nhận từ biến môi trường hay input người dùng để tránh biến tính năng này thành SSRF.
 - Bot không lưu hoặc log nội dung tin nhắn hay response thô. Log lỗi chỉ chứa metadata cần thiết.
-- Response từ GTX được giới hạn kích thước và kiểm tra chặt content type, HTTP status và cấu trúc JSON trước khi dùng.
-- Redirect, HTML chống bot, `403`, `429`, timeout và response sai cấu trúc được trả về dưới dạng lỗi nhà cung cấp; người dùng có thể thử lại sau.
+- Request đặt `x-data-logging-enabled: false`; theo tài liệu Yandex, dữ liệu request mặc định cũng không được lưu nếu không bật header này.
+- Response từ Yandex được giới hạn kích thước và kiểm tra chặt content type, HTTP status và cấu trúc JSON trước khi dùng.
+- `401`, `403`, `429`, timeout, network failure và response sai cấu trúc được phân loại thành lỗi nhà cung cấp; bot không tự retry request dịch để tránh tính phí/quota lặp cho kết quả không chắc chắn.
 - Lỗi API Telegram như `429`/server error được retry tối đa ba lần khi thời gian chờ không vượt 10 giây. Lỗi mạng mơ hồ không tự retry `sendMessage` để giảm nguy cơ gửi bản dịch trùng.
 - Khi khởi động, bot xóa webhook nhưng giữ nguyên update đang chờ rồi mới chạy long polling. Mỗi token chỉ nên chạy một instance tại một thời điểm.
 
-Tham khảo: [Telegram Bot API](https://core.telegram.org/bots/api), [Google Translate robots.txt](https://translate.googleapis.com/robots.txt), [Điều khoản dịch vụ Google](https://policies.google.com/terms?hl=vi).
+Tham khảo: [Telegram Bot API](https://core.telegram.org/bots/api), [Yandex Translate REST API](https://aistudio.yandex.ru/en/docs/translate/api-ref/Translation/translate), [xác thực Yandex Translate](https://aistudio.yandex.ru/en/docs/translate/api-ref/authentication), [quota Yandex Translate](https://aistudio.yandex.ru/en/docs/translate/concepts/limits).

@@ -4,7 +4,7 @@ import {
 } from "./errors.js";
 
 export const VIETNAMESE_LANGUAGE = "vi";
-export const DEFAULT_CHINESE_LANGUAGE = "zh-CN";
+export const DEFAULT_CHINESE_LANGUAGE = "zh";
 
 const HAN_CHARACTER_PATTERN = /\p{Script=Han}/u;
 const LATIN_CHARACTER_PATTERN = /\p{Script=Latin}/u;

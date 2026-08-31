@@ -24,8 +24,8 @@ test("assertContainsSupportedScript từ chối emoji và số thuần túy", ()
 });
 
 test("chọn đúng target cho source Trung và Việt", () => {
-  assert.equal(getTargetLanguageForSource("vi", "zh-TW"), "zh-TW");
-  assert.equal(getTargetLanguageForSource("zh", "zh-TW"), "vi");
+  assert.equal(getTargetLanguageForSource("vi", "zh"), "zh");
+  assert.equal(getTargetLanguageForSource("zh", "zh"), "vi");
 });
 
 test("chuẩn hóa family từ mã ngôn ngữ provider", () => {

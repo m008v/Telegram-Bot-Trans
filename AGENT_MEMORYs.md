@@ -248,3 +248,31 @@
 ### Việc còn lại
 - Cần restart/redeploy tiến trình bot để nạp hành vi mới.
 - `.env.example`, `- Copy.gitignore`, `AGENT_MEMORYs copy.md` và `src.zip` là file/thay đổi có sẵn trước task; không stage vào commit này.
+
+## 2026-08-31 — Chuyển provider sang Yandex Translate API v2
+
+### Mục tiêu
+- Thay endpoint Google GTX không chính thức đang bị giới hạn/chặn bằng Yandex Translate REST API v2 chính thức, giữ luồng dịch Trung–Việt hiện có.
+
+### Đã thực hiện
+- Thay `GtxTranslateService` bằng `YandexTranslateService`, dùng native `fetch` gửi `POST` JSON tới endpoint Yandex hard-code.
+- Thêm `YANDEX_TRANSLATE_API_KEY` bắt buộc và `YANDEX_TRANSLATE_FOLDER_ID` tùy chọn; API key chỉ nằm trong header `Authorization` và được che ở fatal log.
+- Giữ heuristic Trung–Việt: source rõ ràng gửi `vi`/`zh`, Latin mơ hồ để Yandex tự nhận diện rồi chỉ chấp nhận `vi`.
+- Kiểm tra HTTP status, content type, JSON/schema, response tối đa 256 KB, request tối đa 10.000 ký tự, timeout và lỗi stream; đặt `x-data-logging-enabled: false`.
+- Cập nhật thông báo provider, README, `.env.example`, package description và test cho auth, permission, quota, timeout, network, response lỗi và UTF-8 stream.
+
+### Quyết định kỹ thuật
+- Không thêm SDK/dependency vì REST API nhỏ và native `fetch` hiện có đủ timeout, redirect policy và test injection.
+- Yandex chỉ công bố mã tiếng Trung `zh`; chuẩn hóa alias cấu hình cũ `zh-CN` thành `zh` và từ chối `zh-TW` thay vì giả vờ bảo đảm đầu ra phồn thể.
+- Không tự retry request dịch vì API không idempotent và retry sau lỗi mạng mơ hồ có thể đốt quota/tính phí lặp.
+- Folder ID để tùy chọn vì tài liệu quickstart và tài liệu auth Yandex hiện mô tả khác nhau giữa service account và request body.
+
+### Kiểm tra
+- `npm.cmd run check`: ESLint và 78/78 test pass.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: 0 vulnerability.
+- Không chạy live smoke vì môi trường chưa có `YANDEX_TRANSLATE_API_KEY`; unit test dùng HTTP giả lập và không gọi Yandex.
+
+### Việc còn lại
+- Tạo service account Yandex có role `ai.translate.user`, API key scope `yc.ai.translate.execute`, điền key vào `.env` rồi chạy live smoke Việt ↔ Trung.
+- Cần restart/redeploy bot sau khi cấu hình credential Yandex.
+- Dòng admin ID đang sửa sẵn trong `.env.example` cùng `- Copy.gitignore`, `AGENT_MEMORYs copy.md` và `src.zip` là thay đổi ngoài task; không stage vào commit provider.

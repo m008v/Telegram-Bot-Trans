@@ -19,7 +19,7 @@ const START_MESSAGE = [
 ].join("\n");
 
 const PROVIDER_ERROR_MESSAGE =
-  "Google Dịch miễn phí đang bận, giới hạn hoặc chặn request. Vui lòng thử lại sau.";
+  "Dịch vụ dịch đang bận, hết quota hoặc từ chối request. Vui lòng thử lại sau.";
 const CAPACITY_ERROR_MESSAGE =
   "Bot đang xử lý nhiều tin nhắn. Vui lòng thử lại sau ít phút.";
 const BOT_COMMAND_PATTERN =
