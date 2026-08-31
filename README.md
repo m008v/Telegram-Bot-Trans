@@ -105,6 +105,18 @@ npm.cmd run check
 
 Lệnh này chạy ESLint và toàn bộ unit test bằng test runner tích hợp của Node.js. Unit test dùng HTTP giả lập, không gọi hoặc đốt quota Yandex.
 
+### Xử lý lỗi `HTTP_403` / `PERMISSION_DENIED`
+
+Nếu log `translation_failed` có `providerCode: "HTTP_403"`, API key đã được Yandex nhận nhưng service account chưa được phép gọi Translate. Kiểm tra theo thứ tự:
+
+1. Trong Yandex Cloud, mở đúng folder chứa service account đã tạo API key.
+2. Gán role `ai.translate.user` cho service account ở folder đó.
+3. Kiểm tra API key có scope `yc.ai.translate.execute`; tạo key mới nếu key hiện tại thiếu scope.
+4. Giữ `YANDEX_TRANSLATE_FOLDER_ID` rỗng khi dùng API key của service account.
+5. Đảm bảo billing account của cloud đang ở trạng thái `ACTIVE` hoặc `TRIAL_ACTIVE`, sau đó restart bot và thử lại.
+
+Không ghi API key hoặc response lỗi thô vào log. Bot chỉ giữ mã HTTP/provider cần thiết để chẩn đoán.
+
 ## Lưu ý vận hành và bảo mật
 
 - Nội dung dịch được đặt trong body JSON của request `POST`, không xuất hiện trên query string; nội dung vẫn được gửi tới Yandex để xử lý.

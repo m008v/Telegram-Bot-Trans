@@ -197,6 +197,7 @@ test("handler báo lỗi provider trung tính và không nhắc Google GTX", asy
   assert.equal(ctx.replies[0].options, undefined);
   assert.equal(logEntries[0].event, "translation_failed");
   assert.equal(logEntries[0].error.code, "TRANSLATION_PROVIDER_ERROR");
+  assert.equal(logEntries[0].error.providerCode, "HTTP_429");
 });
 
 test("handler báo bận nhưng không log như lỗi provider khi semaphore đầy", async () => {

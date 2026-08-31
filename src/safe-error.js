@@ -16,9 +16,15 @@ function redact(value, secrets) {
 }
 
 export function toSafeError(error, secrets = []) {
-  return {
+  const safeError = {
     name: redact(error?.name || "Error", secrets),
     code: redact(error?.code || "UNKNOWN", secrets),
     message: redact(error?.message || "Lỗi không xác định.", secrets),
   };
+
+  if (error?.providerCode !== undefined && error?.providerCode !== null) {
+    safeError.providerCode = redact(error.providerCode, secrets);
+  }
+
+  return safeError;
 }

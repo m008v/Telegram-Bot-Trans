@@ -276,3 +276,28 @@
 - Tạo service account Yandex có role `ai.translate.user`, API key scope `yc.ai.translate.execute`, điền key vào `.env` rồi chạy live smoke Việt ↔ Trung.
 - Cần restart/redeploy bot sau khi cấu hình credential Yandex.
 - Dòng admin ID đang sửa sẵn trong `.env.example` cùng `- Copy.gitignore`, `AGENT_MEMORYs copy.md` và `src.zip` là thay đổi ngoài task; không stage vào commit provider.
+
+## 2026-08-31 — Chẩn đoán Yandex `PERMISSION_DENIED`
+
+### Mục tiêu
+- Xác định nguyên nhân thông báo `Yandex Translate từ chối hoặc không xử lý được request.` khi dịch live.
+
+### Đã thực hiện
+- Gửi smoke request Việt → Trung với credential trong `.env`, không log API key hoặc nội dung bản dịch; Yandex trả `HTTP 403`, gRPC code `7` và `PERMISSION_DENIED`.
+- Giữ thông báo Telegram trung tính nhưng bổ sung `providerCode` đã redact vào `toSafeError()` để log phân biệt `HTTP_401`, `HTTP_403`, `HTTP_429` và lỗi mạng.
+- Thêm hướng dẫn xử lý `HTTP_403` vào README và regression test cho `providerCode`.
+
+### Quyết định kỹ thuật
+- Không log response lỗi thô của Yandex vì có thể chứa ID tài nguyên; mã HTTP/provider đủ để vận hành mà không làm lộ metadata tài khoản.
+- Không tự sửa IAM hoặc billing từ bot. Quyền `ai.translate.user` và scope `yc.ai.translate.execute` phải được cấp ở Yandex Cloud cho đúng service account.
+
+### Kiểm tra
+- Live smoke: thất bại đúng tại `HTTP 403 / PERMISSION_DENIED`; API key được nhận nhưng chưa đủ quyền.
+- `npm.cmd run check`: ESLint và 78/78 test pass.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: 0 vulnerability.
+- `git diff --check` pass; các file task-owned hợp lệ UTF-8 và không phát hiện mojibake.
+
+### Việc còn lại
+- Gán role `ai.translate.user`, kiểm tra scope `yc.ai.translate.execute` và billing `ACTIVE`/`TRIAL_ACTIVE` trong Yandex Cloud.
+- Restart bot rồi chạy lại live smoke; chỉ khi HTTP 200 mới xác nhận provider hoạt động.
+- `.env.example`, `- Copy.gitignore`, `AGENT_MEMORYs copy.md` và `src.zip` là thay đổi có sẵn ngoài task; không stage chung.
